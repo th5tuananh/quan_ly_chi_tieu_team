@@ -3,197 +3,270 @@
 <head>
   <meta charset="UTF-8">
   <title>Quản Lý Chi Tiêu Team</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
     tailwind.config = {
       theme: {
         extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['Fira Code', 'ui-monospace', 'monospace'],
+          },
           colors: {
-            blue: { 600: '#2563EB' },
-            green: { 600: '#16A34A' },
-            amber: { 600: '#D97706' },
-            red: { 600: '#DC2626' }
+            primary: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3' },
+            danger: { 50: '#fff1f2', 100: '#ffe4e6', 500: '#f43f5e', 600: '#e11d48' },
+            success: { 50: '#ecfdf5', 100: '#d1fae5', 500: '#10b981', 600: '#059669' },
+            warning: { 50: '#fffbeb', 100: '#fef3c7', 500: '#f59e0b', 600: '#d97706' },
+            surface: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 800: '#1e293b', 900: '#0f172a' }
           }
         }
       }
     }
   </script>
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; animation: fadeIn 0.3s ease-out; }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .spinner {
-      border: 4px solid rgba(255, 255, 255, 0.3);
-      border-radius: 50%;
-      border-top: 4px solid #2563EB;
-      width: 40px; height: 40px;
-      animation: spin 1s linear infinite;
-    }
+    body { background-color: #f8fafc; color: #0f172a; -webkit-font-smoothing: antialiased; }
+    .tabular-nums { font-variant-numeric: tabular-nums; font-family: 'Fira Code', monospace; letter-spacing: -0.02em; }
+    .tab-content { display: none; opacity: 0; transition: opacity 0.2s ease; }
+    .tab-content.active { display: block; animation: smoothFade 0.3s ease forwards; }
+    @keyframes smoothFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    
+    .glass-card { background: rgba(255, 255, 255, 0.95); border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
+    .soft-shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.04); }
+    
+    .touch-target { min-height: 44px; min-width: 44px; display: flex; align-items: center; justify-content: center; }
+    
+    /* Loading Spinner */
+    .spinner { border: 3px solid rgba(0,0,0,0.1); border-radius: 50%; border-top-color: #4f46e5; width: 40px; height: 40px; animation: spin 1s linear infinite; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    .toast { transition: all 0.3s; transform: translateY(-100%); opacity: 0; }
+    
+    /* Custom Toast bottom for mobile */
+    .toast { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); transform: translateY(-100%); opacity: 0; margin-bottom: 0.5rem; }
+    @media (max-width: 768px) {
+       .toast { transform: translateY(100%); margin-top: 0; margin-bottom: 0.5rem; }
+    }
     .toast.show { transform: translateY(0); opacity: 1; }
-    .tabular-nums { font-variant-numeric: tabular-nums; }
+    
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    
+    /* Chrome, Safari, Edge, Opera */
+    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    /* Firefox */
+    input[type=number] { -moz-appearance: textfield; }
+
+    /* Custom Checkbox as Pills */
+    .pill-checkbox:checked + div {
+      background-color: #e0e7ff;
+      border-color: #4f46e5;
+      color: #4338ca;
+    }
+    .pill-checkbox:checked + div svg {
+      opacity: 1;
+      transform: scale(1);
+    }
   </style>
 </head>
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
+<body class="bg-surface-50 text-surface-900 min-h-screen flex flex-col font-sans">
 
-  <!-- Header & Nav -->
-  <header class="bg-white shadow">
-    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+  <!-- Desktop Header Nav -->
+  <header class="bg-white border-b border-surface-200 sticky top-0 z-30">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col sm:flex-row justify-between items-center py-4">
-        <h1 class="text-2xl font-bold text-blue-600 mb-4 sm:mb-0">💰 Quản Lý Chi Tiêu</h1>
-        <nav class="flex space-x-2 overflow-x-auto w-full sm:w-auto">
-          <button class="nav-tab px-3 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600" data-target="tab-tong-quan">Tổng Quan</button>
-          <button class="nav-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-target="tab-tao-don">Tạo Đơn</button>
-          <button class="nav-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-target="tab-lich-su">Lịch Sử</button>
-          <button class="nav-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-target="tab-thanh-vien">Thành Viên</button>
+        <div class="flex items-center space-x-2 text-primary-600 mb-3 sm:mb-0">
+          <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <h1 class="text-xl font-bold tracking-tight">Chi Tiêu Team</h1>
+        </div>
+        <!-- Only visible on desktop (md and up) -->
+        <nav class="hidden md:flex space-x-2 w-full sm:w-auto">
+          <button class="nav-tab px-4 py-2 text-sm font-semibold border-b-2 border-primary-600 text-primary-600 transition" data-target="tab-tong-quan">Tổng Quan</button>
+          <button class="nav-tab px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition" data-target="tab-tao-don">Tạo Đơn</button>
+          <button class="nav-tab px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition" data-target="tab-lich-su">Lịch Sử</button>
+          <button class="nav-tab px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition" data-target="tab-thanh-vien">Thành Viên</button>
         </nav>
       </div>
     </div>
   </header>
 
-  <!-- Main Content -->
-  <main class="flex-grow max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+  <!-- Main Content, spacing at bottom for mobile nav -->
+  <main class="flex-grow max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full pb-24 md:pb-8">
     
-    <!-- Tab 1: Tổng Quan -->
+    <!-- Trang 1: TỔNG QUAN -->
     <div id="tab-tong-quan" class="tab-content active">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 class="text-sm font-medium text-gray-500">Tổng nợ tồn đọng</h3>
-          <p class="text-2xl font-bold text-red-600 mt-2 tabular-nums" id="overview-total-debt">0 đ</p>
+      <!-- Top Metrics -->
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <div class="glass-card p-5 rounded-2xl">
+          <div class="flex items-center space-x-2 mb-2">
+            <div class="p-1.5 bg-danger-50 text-danger-500 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg></div>
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng nợ tồn</h3>
+          </div>
+          <p class="text-2xl font-bold text-danger-600 tabular-nums truncate" id="overview-total-debt">0 đ</p>
         </div>
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 class="text-sm font-medium text-gray-500">Đơn chưa thanh toán</h3>
-          <p class="text-2xl font-bold text-amber-600 mt-2 tabular-nums" id="overview-unpaid-tx">0</p>
+        <div class="glass-card p-5 rounded-2xl">
+          <div class="flex items-center space-x-2 mb-2">
+            <div class="p-1.5 bg-warning-50 text-warning-600 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Đơn chưa trả</h3>
+          </div>
+          <p class="text-2xl font-bold text-gray-900 tabular-nums" id="overview-unpaid-tx">0</p>
         </div>
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 class="text-sm font-medium text-gray-500">Thành viên</h3>
-          <p class="text-2xl font-bold text-blue-600 mt-2 tabular-nums" id="overview-member-count">0</p>
+        <div class="glass-card p-5 rounded-2xl col-span-2 md:col-span-1 flex flex-row md:flex-col justify-between items-center md:items-start">
+          <div class="flex items-center space-x-2 mb-0 md:mb-2 text-primary-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+            <h3 class="text-xs font-semibold uppercase tracking-wider">Thành viên</h3>
+          </div>
+          <p class="text-2xl font-bold text-gray-900 tabular-nums" id="overview-member-count">0</p>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="md:col-span-2 bg-white rounded-lg shadow-sm border overflow-hidden">
-          <div class="px-6 py-4 border-b">
-            <h2 class="text-lg font-bold">Chi tiết Ai Nợ Ai</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Ai nợ ai -->
+        <div class="lg:col-span-2 space-y-4">
+          <div class="flex justify-between items-end">
+            <h2 class="text-lg font-bold text-surface-900">Chi tiết Ai Nợ Ai</h2>
           </div>
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Người nợ</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Người được nợ</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Số tiền</th>
-                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200" id="debt-summary-body">
-                <!-- Rows render here -->
-              </tbody>
-            </table>
+          <div class="glass-card rounded-2xl overflow-hidden soft-shadow bg-white">
+            <div class="hidden md:block overflow-x-auto">
+              <table class="min-w-full divide-y divide-surface-200">
+                <thead class="bg-surface-50">
+                  <tr>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Người nợ</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Chủ nợ</th>
+                    <th class="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Số tiền</th>
+                    <th class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Hành trình</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-surface-100 bg-white" id="debt-summary-desktop">
+                  <!-- render here for desktop -->
+                </tbody>
+              </table>
+            </div>
+            <!-- Mobile View For Debts -->
+            <div class="md:hidden divide-y divide-surface-100" id="debt-summary-mobile">
+              <!-- render here for mobile -->
+            </div>
           </div>
         </div>
 
-        <div class="bg-white p-6 rounded-lg shadow-sm border h-fit">
-          <h2 class="text-lg font-bold mb-4">Thống Kê Nhanh</h2>
-          <div class="mb-4">
-            <span class="text-sm text-gray-500 block">Nợ nhiều nhất:</span>
-            <div id="stat-top-debtor" class="font-medium text-red-600 mt-1">-</div>
-          </div>
-          <div>
-            <span class="text-sm text-gray-500 block">Được nợ nhiều nhất:</span>
-            <div id="stat-top-creditor" class="font-medium text-green-600 mt-1">-</div>
+        <!-- Thống kê nhanh / Top -->
+        <div class="glass-card p-6 rounded-2xl h-fit bg-white">
+          <h2 class="text-base font-bold mb-5 flex items-center"><svg class="w-5 h-5 mr-2 text-warning-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg> Kỷ lục Tạm Thời</h2>
+          <div class="space-y-4">
+            <div class="bg-danger-50/50 p-3 rounded-xl border border-danger-100">
+              <span class="text-xs font-semibold text-danger-700 uppercase block mb-1">Nợ nhiều nhất</span>
+              <div id="stat-top-debtor" class="font-bold text-danger-600 text-sm tabular-nums">-</div>
+            </div>
+            <div class="bg-success-50/50 p-3 rounded-xl border border-success-100">
+              <span class="text-xs font-semibold text-success-700 uppercase block mb-1">Chủ nợ lớn nhất</span>
+              <div id="stat-top-creditor" class="font-bold text-success-600 text-sm tabular-nums">-</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Tab 2: Tạo Đơn -->
+    <!-- Trang 2: TẠO ĐƠN -->
     <div id="tab-tao-don" class="tab-content">
-      <div class="bg-white rounded-lg shadow-sm border p-6 max-w-2xl mx-auto">
-        <h2 class="text-xl font-bold mb-6">Tạo Giao Dịch Mới</h2>
-        <form id="form-new-tx">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      <div class="glass-card rounded-2xl soft-shadow p-5 md:p-8 max-w-2xl mx-auto bg-white">
+        <h2 class="text-xl font-bold text-surface-900 mx-1 mb-6 flex items-center">
+          <svg class="w-6 h-6 mr-2 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+          Tạo Giao Dịch
+        </h2>
+        
+        <form id="form-new-tx" class="space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Người trả tiền</label>
-              <select id="tx-payer" class="w-full border-gray-300 rounded-md shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500" required>
+              <label class="block text-sm font-semibold text-surface-700 mb-1.5">Người đứng ra trả tiền</label>
+              <select id="tx-payer" class="w-full touch-target bg-surface-50 border border-surface-200 text-surface-900 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 pl-3 pr-8 transition outline-none" required>
                 <option value="">-- Chọn --</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Ngày</label>
-              <input type="date" id="tx-date" class="w-full border-gray-300 rounded-md shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500" required>
+              <label class="block text-sm font-semibold text-surface-700 mb-1.5">Ngày mua</label>
+              <input type="date" id="tx-date" class="w-full touch-target bg-surface-50 border border-surface-200 text-surface-900 rounded-xl px-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition outline-none" required>
             </div>
           </div>
           
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
-            <input type="text" id="tx-desc" placeholder="VD: Trà sữa Phúc Long, Cơm trưa..." class="w-full border-gray-300 rounded-md shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500" required>
+          <div>
+            <label class="block text-sm font-semibold text-surface-700 mb-1.5">Mô tả (Món gì, ở đâu?)</label>
+            <input type="text" id="tx-desc" placeholder="VD: Trà sữa Phúc Long, Cơm trưa..." class="w-full touch-target bg-surface-50 border border-surface-200 text-surface-900 rounded-xl px-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition outline-none" required>
           </div>
 
-          <div class="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Nguồn đặt</label>
-              <div class="flex flex-wrap gap-4">
-                <label class="inline-flex items-center"><input type="radio" name="tx-source" value="Grab" class="text-blue-600"> <span class="ml-2">Grab</span></label>
-                <label class="inline-flex items-center"><input type="radio" name="tx-source" value="ShopeeFood" class="text-blue-600"> <span class="ml-2">ShopeeFood</span></label>
-                <label class="inline-flex items-center"><input type="radio" name="tx-source" value="Bên ngoài" class="text-blue-600" checked> <span class="ml-2">Bên ngoài</span></label>
-                <label class="inline-flex items-center"><input type="radio" name="tx-source" value="Khác" class="text-blue-600"> <span class="ml-2">Khác</span></label>
+              <label class="block text-sm font-semibold text-surface-700 mb-2">Nguồn đặt</label>
+              <div class="flex flex-wrap gap-2 text-sm">
+                <label class="cursor-pointer border-0 p-0 m-0 w-auto h-auto">
+                  <input type="radio" name="tx-source" value="Grab" class="peer sr-only">
+                  <div class="px-3 min-h-[36px] flex items-center justify-center rounded-lg border border-surface-200 bg-white text-surface-600 peer-checked:border-success-500 peer-checked:bg-success-50 peer-checked:text-success-700 peer-checked:font-medium transition pt-1 pb-1">Grab</div>
+                </label>
+                <label class="cursor-pointer border-0 p-0 m-0 w-auto h-auto">
+                  <input type="radio" name="tx-source" value="ShopeeFood" class="peer sr-only">
+                  <div class="px-3 min-h-[36px] flex items-center justify-center rounded-lg border border-surface-200 bg-white text-surface-600 peer-checked:border-warning-500 peer-checked:bg-warning-50 peer-checked:text-warning-700 peer-checked:font-medium transition pt-1 pb-1">ShopeeFood</div>
+                </label>
+                <label class="cursor-pointer border-0 p-0 m-0 w-auto h-auto">
+                  <input type="radio" name="tx-source" value="Bên ngoài" class="peer sr-only" checked>
+                  <div class="px-3 min-h-[36px] flex items-center justify-center rounded-lg border border-surface-200 bg-white text-surface-600 peer-checked:border-primary-500 peer-checked:bg-primary-50 peer-checked:text-primary-700 peer-checked:font-medium transition pt-1 pb-1">Bên ngoài</div>
+                </label>
               </div>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Tổng tiền (VNĐ)</label>
-              <input type="number" id="tx-total" defaultValue="0" min="0" class="w-full border-gray-300 rounded-md shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500 font-bold text-lg tabular-nums" required>
+              <label class="block text-sm font-semibold text-surface-700 mb-1.5">Tổng tiền bill (VNĐ)</label>
+              <div class="relative">
+                <input type="number" id="tx-total" defaultValue="0" min="0" class="w-full touch-target bg-surface-50 border border-surface-200 text-surface-900 rounded-xl pl-3 pr-10 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-bold text-xl tabular-nums text-right transition outline-none" required>
+                <span class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none font-medium text-surface-500">đ</span>
+              </div>
             </div>
           </div>
 
-          <hr class="my-6">
+          <hr class="border-surface-100 my-2">
 
-          <div class="mb-4 flex justify-between items-center">
-            <label class="block text-sm font-bold text-gray-700">Chia cho ai?</label>
-            <div class="flex items-center space-x-4">
-              <label class="inline-flex items-center text-sm cursor-pointer">
-                <input type="checkbox" id="tx-select-all" class="text-blue-600 rounded border-gray-300" checked>
-                <span class="ml-2">Chọn tất cả</span>
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-50 p-3 rounded-xl border border-surface-100">
+            <div class="flex items-center">
+              <label class="inline-flex items-center cursor-pointer mr-4 min-h-[44px]">
+                <input type="checkbox" id="tx-select-all" class="w-5 h-5 text-primary-600 border-surface-300 focus:ring-primary-500 rounded" checked>
+                <span class="ml-2 font-semibold text-sm">Chọn tất cả</span>
               </label>
-              <div class="flex bg-gray-100 rounded-md p-1">
-                <button type="button" id="mode-even" class="px-3 py-1 text-sm rounded bg-white shadow-sm font-medium">Chia đều</button>
-                <button type="button" id="mode-custom" class="px-3 py-1 text-sm rounded text-gray-500 font-medium">Theo món</button>
-              </div>
+            </div>
+            <div class="flex bg-surface-200/50 p-1 rounded-lg">
+               <button type="button" id="mode-even" class="flex-1 px-4 py-2 text-sm rounded-md bg-white shadow-sm font-semibold text-surface-900 transition min-w-[90px]">Chia đều</button>
+               <button type="button" id="mode-custom" class="flex-1 px-4 py-2 text-sm rounded-md text-surface-500 font-medium hover:text-surface-900 transition min-w-[90px]">Tùy chỉnh</button>
             </div>
           </div>
 
-          <div id="split-list" class="space-y-3 mb-6">
+          <!-- Danh sách người chia -->
+          <div id="split-list" class="space-y-2 mt-4">
             <!-- Split rows render here -->
           </div>
 
-          <div id="custom-split-info" class="mb-6 p-4 bg-blue-50 rounded-md text-sm hidden flex justify-between font-medium">
-            <span class="text-blue-800">Tổng phụ: <span id="custom-subtotal">0</span> đ</span>
-            <span class="text-amber-600" id="custom-remaining-wrapper">Còn lại: <span id="custom-remaining">0</span> đ</span>
+          <div id="custom-split-info" class="p-4 bg-primary-50 rounded-xl border border-primary-100 text-sm hidden flex-col sm:flex-row justify-between font-semibold gap-2 transition-all">
+            <span class="text-primary-800 flex items-center"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg> Tổng phụ: <span id="custom-subtotal" class="tabular-nums ml-1">0</span> đ</span>
+            <span class="text-warning-600 flex items-center" id="custom-remaining-wrapper">
+              Còn lệch: <span id="custom-remaining" class="tabular-nums shadow-sm rounded bg-white px-2 py-0.5 ml-2 border">0</span> đ
+            </span>
           </div>
 
-          <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700 transition">
-            Tạo Đơn Giao Dịch
+          <button type="submit" class="w-full bg-primary-600 text-white font-bold touch-target rounded-xl hover:bg-primary-700 active:scale-[0.98] transition-all shadow-md mt-6 border-0">
+            Lưu Giao Dịch Này
           </button>
         </form>
       </div>
     </div>
 
-    <!-- Tab 3: Lịch Sử -->
+    <!-- Trang 3: LỊCH SỬ -->
     <div id="tab-lich-su" class="tab-content">
-      <div class="bg-white p-4 rounded-lg shadow-sm border mb-6 flex flex-col sm:flex-row gap-4 items-end">
-        <div class="w-full sm:w-1/3">
-          <label class="block text-xs font-medium text-gray-500 mb-1">Tìm kiếm</label>
-          <input type="text" id="filter-search" placeholder="Từ khóa mô tả..." class="w-full border p-2 rounded-md text-sm">
+      <div class="glass-card p-4 rounded-2xl mb-6 flex flex-col md:flex-row gap-3 items-end bg-white">
+        <div class="w-full md:flex-1 relative">
+          <label class="block text-xs font-semibold text-surface-500 mb-1 ml-1">Tìm kiếm chi tiêu</label>
+          <div class="relative">
+            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input type="text" id="filter-search" placeholder="Tên món ăn..." class="w-full pl-9 pr-3 touch-target border border-surface-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none transition bg-surface-50">
+          </div>
         </div>
-        <div class="w-full sm:w-1/4">
-          <label class="block text-xs font-medium text-gray-500 mb-1">Nguồn</label>
-          <select id="filter-source" class="w-full border p-2 rounded-md text-sm">
+        <div class="w-full md:w-1/4">
+          <label class="block text-xs font-semibold text-surface-500 mb-1 ml-1">Nguồn đặt</label>
+          <select id="filter-source" class="w-full touch-target px-3 border border-surface-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none transition bg-surface-50">
             <option value="">Tất cả</option>
             <option value="Grab">Grab</option>
             <option value="ShopeeFood">ShopeeFood</option>
@@ -201,9 +274,9 @@
             <option value="Khác">Khác</option>
           </select>
         </div>
-        <div class="w-full sm:w-auto">
-          <button id="btn-refresh-history" class="w-full sm:w-auto px-4 py-2 border rounded-md text-sm hover:bg-gray-50 flex items-center justify-center">
-            🔄 Làm mới
+        <div class="w-full md:w-auto">
+          <button id="btn-refresh-history" class="w-full md:w-auto px-4 border border-surface-200 rounded-xl font-medium touch-target hover:bg-surface-50 flex items-center justify-center transition text-surface-700 bg-white">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Tải lại
           </button>
         </div>
       </div>
@@ -213,40 +286,55 @@
       </div>
     </div>
 
-    <!-- Tab 4: Thành Viên -->
+    <!-- Trang 4: THÀNH VIÊN -->
     <div id="tab-thanh-vien" class="tab-content">
-      <div class="flex justify-between items-center mb-6">
-        <h2 class="text-xl font-bold">Danh sách thành viên</h2>
-        <div class="flex space-x-2">
-          <input type="text" id="new-member-name" placeholder="Tên thành viên mới" class="border p-2 rounded-md text-sm">
-          <button id="btn-add-member" class="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 font-medium">Thêm</button>
+      <div class="glass-card mb-6 p-4 md:p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white">
+        <h2 class="text-xl font-bold flex items-center text-surface-900">
+           <svg class="w-6 h-6 mr-2 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg> Nhóm của bạn
+        </h2>
+        <div class="flex space-x-2 w-full md:w-auto">
+          <input type="text" id="new-member-name" placeholder="Tên thành viên mới..." class="touch-target border border-surface-200 px-3 flex-1 md:w-48 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none transition bg-surface-50">
+          <button id="btn-add-member" class="bg-primary-600 text-white px-5 rounded-xl text-sm font-semibold hover:bg-primary-700 transition active:scale-95 touch-target shadow-sm flex-none border-0">Thêm</button>
         </div>
       </div>
       
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" id="member-cards">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" id="member-cards">
         <!-- Member cards render here -->
       </div>
     </div>
 
   </main>
 
-  <!-- Footer -->
-  <footer class="bg-gray-100 py-4 mt-auto">
-    <div class="max-w-5xl mx-auto px-4 text-center text-xs text-gray-500">
-      Dữ liệu được lưu trên Google Sheets • Cập nhật lần cuối: <span id="last-update">-</span>
-    </div>
-  </footer>
+  <!-- Mobile Bottom Navigation -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md shadow-[0_-2px_15px_rgba(0,0,0,0.05)] border-t border-surface-100 flex justify-around items-center h-16 z-40 px-2 pb-safe">
+    <button class="nav-tab mobile-tab flex flex-col items-center justify-center w-full h-full text-primary-600 transition" data-target="tab-tong-quan">
+      <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+      <span class="text-[10px] font-semibold leading-none">Tổng quan</span>
+    </button>
+    <button class="nav-tab mobile-tab flex flex-col items-center justify-center w-full h-full text-surface-400 hover:text-surface-700 transition relative" data-target="tab-tao-don">
+      <div class="absolute -top-4 bg-primary-600 text-white p-3 rounded-full shadow-lg border-4 border-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg></div>
+      <span class="text-[10px] font-semibold leading-none mt-7">Tạo Bill</span>
+    </button>
+    <button class="nav-tab mobile-tab flex flex-col items-center justify-center w-full h-full text-surface-400 hover:text-surface-700 transition" data-target="tab-lich-su">
+      <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      <span class="text-[10px] font-semibold leading-none">Lịch sử</span>
+    </button>
+    <button class="nav-tab mobile-tab flex flex-col items-center justify-center w-full h-full text-surface-400 hover:text-surface-700 transition" data-target="tab-thanh-vien">
+      <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+      <span class="text-[10px] font-semibold leading-none">Nhóm</span>
+    </button>
+  </nav>
 
   <!-- Loading Overlay -->
-  <div id="loading" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex items-center justify-center hidden">
-    <div class="bg-white p-6 rounded-lg shadow-xl flex flex-col items-center">
-      <div class="loader mb-4 border-t-blue-600 border-4 border-solid border-gray-200 w-10 h-10 rounded-full animate-spin"></div>
-      <p class="font-medium text-gray-700">Đang xử lý...</p>
+  <div id="loading" class="fixed inset-0 bg-surface-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center w-40">
+      <div class="spinner mb-4"></div>
+      <p class="font-semibold text-surface-800 text-sm">Đang tải...</p>
     </div>
   </div>
 
   <!-- Toast Container -->
-  <div class="fixed top-4 right-4 z-50 flex flex-col gap-2" id="toast-container"></div>
+  <div class="fixed top-4 md:top-auto md:bottom-24 left-4 right-4 md:left-auto md:right-8 z-50 flex flex-col gap-2 pointer-events-none items-end" id="toast-container"></div>
 
   <script>
     // --- GLOBAL STATE ---
@@ -259,24 +347,37 @@
     const formatDate = (isoStr) => {
       if(!isoStr) return '';
       const d = new Date(isoStr);
-      return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+      return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} • ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
     };
     
-    const showLoading = () => document.getElementById('loading').classList.remove('hidden');
-    const hideLoading = () => document.getElementById('loading').classList.add('hidden');
+    const showLoading = () => {
+      const el = document.getElementById('loading');
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.remove('opacity-0'), 10);
+    };
+    const hideLoading = () => {
+      const el = document.getElementById('loading');
+      el.classList.add('opacity-0');
+      setTimeout(() => el.classList.add('hidden'), 300);
+    };
     
     const showToast = (msg, type = 'success') => {
       const el = document.createElement('div');
-      const color = type === 'success' ? 'bg-green-600' : 'bg-red-600';
-      el.className = `toast ${color} text-white px-4 py-3 rounded shadow-lg flex items-center`;
-      el.innerHTML = `<span>${msg}</span>`;
+      const isSuccess = type === 'success';
+      const bgColor = isSuccess ? 'bg-surface-900' : 'bg-danger-600';
+      const icon = isSuccess 
+        ? `<svg class="w-5 h-5 text-success-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`
+        : `<svg class="w-5 h-5 text-white mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+        
+      el.className = `toast ${bgColor} text-white px-4 py-3 rounded-xl shadow-xl flex items-center max-w-sm w-fit font-medium text-sm`;
+      el.innerHTML = `${icon}<span>${msg}</span>`;
       document.getElementById('toast-container').appendChild(el);
       
       setTimeout(() => el.classList.add('show'), 10);
       setTimeout(() => {
         el.classList.remove('show');
         setTimeout(() => el.remove(), 300);
-      }, 3000);
+      }, 3500);
     };
 
     const runAsync = (funcName, ...args) => {
@@ -284,16 +385,12 @@
         google.script.run
           .withSuccessHandler(res => {
             try {
-              resolve(typeof res === 'string' && res.startsWith('[') || res.startsWith('{') ? JSON.parse(res) : res);
+              resolve(typeof res === 'string' && (res.startsWith('[') || res.startsWith('{')) ? JSON.parse(res) : res);
             } catch(e) { resolve(res); }
           })
           .withFailureHandler(reject)
           [funcName](...args);
       });
-    };
-
-    const setLastUpdate = () => {
-      document.getElementById('last-update').innerText = new Date().toLocaleString('vi-VN');
     };
 
     // --- INIT ---
@@ -304,7 +401,6 @@
       
       try {
         showLoading();
-        // Load data concurrently
         const [memRes, txRes] = await Promise.all([
           runAsync('getMembers'),
           runAsync('getTransactions')
@@ -323,7 +419,7 @@
         hideLoading();
       }
 
-      // History Filters
+      // Filters
       document.getElementById('filter-search').addEventListener('input', renderHistory);
       document.getElementById('filter-source').addEventListener('change', renderHistory);
       document.getElementById('btn-refresh-history').addEventListener('click', async () => {
@@ -336,7 +432,7 @@
         hideLoading();
       });
 
-      // Add Member
+      // Member
       document.getElementById('btn-add-member').addEventListener('click', async () => {
         const nameInput = document.getElementById('new-member-name');
         const name = nameInput.value.trim();
@@ -348,7 +444,7 @@
           members = res;
           nameInput.value = '';
           refreshUI();
-          showToast('Thêm thành viên thành công');
+          showToast('Đã chốt thêm người này');
         } catch(e) {
           showToast(e.message, 'error');
         } finally {
@@ -363,7 +459,6 @@
       renderSplitList();
       renderHistory();
       await updateDashboard();
-      setLastUpdate();
     };
 
     // --- TABS ---
@@ -371,37 +466,44 @@
       const tabs = document.querySelectorAll('.nav-tab');
       tabs.forEach(tab => {
         tab.addEventListener('click', () => {
-          tabs.forEach(t => {
-            t.classList.remove('border-blue-600', 'text-blue-600');
-            t.classList.add('border-transparent', 'text-gray-500');
+          const targetId = tab.dataset.target;
+          // reset all
+          document.querySelectorAll('.nav-tab').forEach(t => {
+            if(t.classList.contains('mobile-tab')) {
+              t.classList.remove('text-primary-600');
+              t.classList.add('text-surface-400');
+            } else {
+              t.classList.remove('border-primary-600', 'text-primary-600');
+              t.classList.add('border-transparent', 'text-gray-500');
+            }
           });
-          tab.classList.remove('border-transparent', 'text-gray-500');
-          tab.classList.add('border-blue-600', 'text-blue-600');
+          // activate matched
+          document.querySelectorAll(`.nav-tab[data-target="${targetId}"]`).forEach(t => {
+            if(t.classList.contains('mobile-tab')) {
+              t.classList.remove('text-surface-400');
+              t.classList.add('text-primary-600');
+            } else {
+              t.classList.remove('border-transparent', 'text-gray-500');
+              t.classList.add('border-primary-600', 'text-primary-600');
+            }
+          });
           
           document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-          document.getElementById(tab.dataset.target).classList.add('active');
+          document.getElementById(targetId).classList.add('active');
+          window.scrollTo({top:0, behavior:'smooth'});
         });
       });
     };
 
     // --- DASHBOARD ---
     const updateDashboard = async () => {
-      const countMem = members.length;
-      document.getElementById('overview-member-count').innerText = countMem;
+      document.getElementById('overview-member-count').innerText = members.length;
 
       let unpaidCount = 0;
-      let totalDebtMap = {}; // debtor -> amount
-      let totalCreditMap = {}; // creditor -> amount
-
       transactions.forEach(tx => {
         let hasUnpaid = false;
         tx.chiTiet.forEach(ct => {
-          if (!ct.daThanhToan && ct.thanhVienId !== tx.nguoiTra) {
-            hasUnpaid = true;
-            const amt = parseFloat(ct.soTien);
-            totalDebtMap[ct.thanhVienId] = (totalDebtMap[ct.thanhVienId] || 0) + amt;
-            totalCreditMap[tx.nguoiTra] = (totalCreditMap[tx.nguoiTra] || 0) + amt;
-          }
+          if (!ct.daThanhToan && ct.thanhVienId !== tx.nguoiTra) hasUnpaid = true;
         });
         if (hasUnpaid) unpaidCount++;
       });
@@ -412,37 +514,60 @@
         if(summary.error) throw new Error(summary.error);
         
         let grandTotal = 0;
-        const tbody = document.getElementById('debt-summary-body');
-        tbody.innerHTML = '';
+        const tbodyDesktop = document.getElementById('debt-summary-desktop');
+        const containerMobile = document.getElementById('debt-summary-mobile');
+        tbodyDesktop.innerHTML = '';
+        containerMobile.innerHTML = '';
         
         if (summary.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">Tuyệt vời! Không ai nợ ai.</td></tr>`;
+          const emptyHtml = `<tr><td colspan="4" class="px-6 py-8 text-center text-sm font-medium text-surface-500">🎉 Tuyệt vời! Không ai nợ ai.</td></tr>`;
+          tbodyDesktop.innerHTML = emptyHtml;
+          containerMobile.innerHTML = `<div class="p-6 text-center text-sm font-medium text-surface-500">🎉 Không có khoản nợ nào.</div>`;
         } else {
           summary.forEach(s => {
             grandTotal += s.amount;
             const isHigh = s.amount > 100000;
-            const trClass = isHigh ? 'bg-red-50' : '';
-            const tr = document.createElement('tr');
-            tr.className = trClass;
-            tr.innerHTML = `
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${s.fromName}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${s.toName}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-bold ${isHigh ? 'text-red-600' : 'text-gray-900'}">${formatCurrency(s.amount)}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                <button class="text-green-600 hover:text-green-900 bg-green-100 hover:bg-green-200 px-3 py-1 rounded transition" onclick="markPairPaid('${s.from}', '${s.to}')">Đã trả ✓</button>
-              </td>
+            const amtClass = isHigh ? 'text-danger-600' : 'text-surface-900';
+            
+            // Initial generator
+            const fromInit = s.fromName.substring(0, 2).toUpperCase();
+            const toInit = s.toName.substring(0, 2).toUpperCase();
+            
+            // Desktop Row
+            tbodyDesktop.innerHTML += `
+              <tr class="hover:bg-surface-50 transition">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-surface-900 flex items-center"><div class="w-6 h-6 rounded-full bg-danger-100 text-danger-700 font-bold text-[10px] flex items-center justify-center mr-2">${fromInit}</div>${s.fromName}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-surface-600">Trả <span class="font-bold text-surface-900">${s.toName}</span></td>
+                <td class="px-6 py-4 whitespace-nowrap text-right font-bold tabular-nums text-base ${amtClass}">${formatCurrency(s.amount)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-center">
+                  <button class="text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 px-3 py-1.5 rounded-lg transition active:scale-95 border-0" onclick="markPairPaid('${s.from}', '${s.to}')">Xác nhận xong ✓</button>
+                </td>
+              </tr>
             `;
-            tbody.appendChild(tr);
+            // Mobile Row
+            containerMobile.innerHTML += `
+              <div class="p-4 flex flex-col space-y-3">
+                <div class="flex justify-between items-center">
+                  <div class="flex items-center space-x-2">
+                    <span class="font-bold text-surface-900">${s.fromName}</span>
+                    <svg class="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    <span class="font-medium text-surface-600">${s.toName}</span>
+                  </div>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="font-bold tabular-nums text-lg ${amtClass}">${formatCurrency(s.amount)}</span>
+                  <button class="text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 px-4 py-2 touch-target rounded-lg transition border-0" onclick="markPairPaid('${s.from}', '${s.to}')">Xác nhận ✓</button>
+                </div>
+              </div>
+            `;
           });
         }
         document.getElementById('overview-total-debt').innerText = formatCurrency(grandTotal);
 
-        // Calculate top debtor/creditor based on net summary
         let maxDebt = 0, topDebtorName = '-';
         let maxCred = 0, topCredName = '-';
+        const netOwed = {}; const netOws = {};
         
-        const netOwed = {};
-        const netOws = {};
         summary.forEach(s => {
            netOwed[s.fromName] = (netOwed[s.fromName] || 0) + s.amount;
            netOws[s.toName] = (netOws[s.toName] || 0) + s.amount;
@@ -458,13 +583,12 @@
     };
 
     window.markPairPaid = async (debtorId, creditorId) => {
-      //if(!confirm(`Xác nhận thanh toán toàn bộ nợ?`)) return;
       showLoading();
       try {
         await runAsync('markAllPaidForMember', debtorId, creditorId);
         transactions = await runAsync('getTransactions');
         refreshUI();
-        showToast('Cập nhật thành công');
+        showToast('Chốt đơn thành công');
       } catch(e) { showToast(e.message, 'error'); }
       finally { hideLoading(); }
     };
@@ -472,7 +596,7 @@
     // --- TẠO ĐƠN ---
     const updatePayerDropdown = () => {
       const sel = document.getElementById('tx-payer');
-      sel.innerHTML = '<option value="">-- Chọn --</option>';
+      sel.innerHTML = '<option value="">-- Chọn ai trả? --</option>';
       members.forEach(m => {
         sel.innerHTML += `<option value="${m.id}">${m.ten}</option>`;
       });
@@ -485,17 +609,19 @@
 
       btnEven.onclick = () => {
         splitMode = 'even';
-        btnEven.className = "px-3 py-1 text-sm rounded bg-white shadow-sm font-medium";
-        btnCustom.className = "px-3 py-1 text-sm rounded text-gray-500 font-medium";
+        btnEven.className = "flex-1 px-4 py-2 text-sm rounded-md bg-white shadow-sm font-semibold text-surface-900 transition min-w-[90px] border-0";
+        btnCustom.className = "flex-1 px-4 py-2 text-sm rounded-md text-surface-500 font-medium hover:text-surface-900 transition min-w-[90px] border-0";
         info.classList.add('hidden');
+        info.classList.remove('flex');
         renderSplitList();
       };
       
       btnCustom.onclick = () => {
         splitMode = 'custom';
-        btnCustom.className = "px-3 py-1 text-sm rounded bg-white shadow-sm font-medium";
-        btnEven.className = "px-3 py-1 text-sm rounded text-gray-500 font-medium";
+        btnCustom.className = "flex-1 px-4 py-2 text-sm rounded-md bg-white shadow-sm font-semibold text-surface-900 transition min-w-[90px] border-0";
+        btnEven.className = "flex-1 px-4 py-2 text-sm rounded-md text-surface-500 font-medium hover:text-surface-900 transition min-w-[90px] border-0";
         info.classList.remove('hidden');
+        info.classList.add('flex');
         renderSplitList();
       };
 
@@ -512,7 +638,6 @@
 
       document.getElementById('form-new-tx').addEventListener('submit', async (e) => {
         e.preventDefault();
-        
         const payer = document.getElementById('tx-payer').value;
         const date = document.getElementById('tx-date').value;
         const desc = document.getElementById('tx-desc').value;
@@ -522,8 +647,7 @@
         const chiTiet = [];
         let sum = 0;
         
-        const checkboxes = document.querySelectorAll('.split-check');
-        checkboxes.forEach(cb => {
+        document.querySelectorAll('.split-check').forEach(cb => {
           if (cb.checked) {
             const mId = cb.dataset.id;
             let amt = 0;
@@ -537,12 +661,8 @@
           }
         });
 
-        if (chiTiet.length === 0) return showToast("Vui lòng chọn người chia tiền", "error");
-        
-        // Tolerance for rounding
-        if (Math.abs(sum - total) > 10) {
-           return showToast(`Tổng số tiền chia (${sum}) không khớp với tổng tiền (${total})`, "error");
-        }
+        if (chiTiet.length === 0) return showToast("Mời đại ca chọn người chia bill!", "error");
+        if (Math.abs(sum - total) > 10) return showToast(`Tính tổng tiền chia chưa khớp bill (${formatCurrency(sum)} / ${formatCurrency(total)})`, "error");
 
         showLoading();
         try {
@@ -551,11 +671,12 @@
           }));
           if (res.error) throw new Error(res.error);
           
-          showToast("Tạo giao dịch thành công!");
+          showToast("Bill đã được phát hành! 🚀");
           document.getElementById('form-new-tx').reset();
           document.getElementById('tx-date').valueAsDate = new Date();
           transactions = await runAsync('getTransactions');
           refreshUI();
+          document.querySelector('.nav-tab[data-target="tab-lich-su"]').click();
           
         } catch(err) {
           showToast(err.message, "error");
@@ -571,19 +692,25 @@
       
       members.forEach(m => {
         const div = document.createElement('div');
-        div.className = "flex items-center justify-between p-3 border rounded-md bg-gray-50 hover:bg-gray-100 transition";
+        div.className = "flex items-center justify-between p-3 border border-surface-200 rounded-xl bg-white hover:bg-surface-50 transition";
         
         let rightSide = '';
         if (splitMode === 'even') {
-          rightSide = `<span id="split-amt-${m.id}" class="font-medium text-gray-700">0 đ</span>`;
+          rightSide = `<span id="split-amt-${m.id}" class="font-bold text-surface-900 tabular-nums">0 đ</span>`;
         } else {
-          rightSide = `<input type="number" id="split-input-${m.id}" min="0" placeholder="0" class="border p-1 w-24 text-right rounded tabular-nums" oninput="calcCustomSplit()"> <span class="text-sm text-gray-500 ml-1">đ</span>`;
+          rightSide = `<div class="relative"><input type="number" id="split-input-${m.id}" min="0" placeholder="0" class="border border-surface-300 touch-target w-28 text-right rounded-lg pl-2 pr-6 tabular-nums font-medium focus:ring-2 focus:ring-primary-500 outline-none" oninput="calcCustomSplit()"><span class="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-surface-500 text-sm">đ</span></div>`;
         }
 
+        const initials = m.ten.substring(0,2).toUpperCase();
+
         div.innerHTML = `
-          <label class="flex items-center cursor-pointer flex-grow">
-            <input type="checkbox" class="split-check text-blue-600 rounded border-gray-300 w-4 h-4 mr-3" data-id="${m.id}" checked onchange="calcEvenSplit(); calcCustomSplit();">
-            <span class="font-medium">${m.ten}</span>
+          <label class="flex items-center cursor-pointer flex-grow touch-target mr-4 mb-0 w-auto">
+            <input type="checkbox" class="split-check sr-only pill-checkbox" data-id="${m.id}" checked onchange="calcEvenSplit(); calcCustomSplit();">
+            <div class="w-6 h-6 mr-3 rounded border-2 border-surface-300 flex items-center justify-center bg-white transition relative flex-shrink-0">
+               <svg class="w-4 h-4 text-primary-600 opacity-0 transform scale-50 transition-all duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center mr-3 flex-shrink-0">${initials}</div>
+            <span class="font-semibold text-surface-800">${m.ten}</span>
           </label>
           <div class="flex items-center">
             ${rightSide}
@@ -591,7 +718,6 @@
         `;
         container.appendChild(div);
       });
-      
       if(splitMode === 'even') calcEvenSplit();
       else calcCustomSplit();
     };
@@ -614,7 +740,7 @@
       checkedArr.forEach((cb, idx) => {
         const mId = cb.dataset.id;
         let amt = amtPerPerson;
-        if (idx === count - 1) amt = total - applied; // adjust last person for rounding
+        if (idx === count - 1) amt = total - applied;
         document.getElementById(`split-amt-${mId}`).innerText = formatCurrency(amt);
         applied += amtPerPerson;
       });
@@ -639,17 +765,17 @@
       document.getElementById('custom-remaining').innerText = new Intl.NumberFormat('vi-VN').format(rem);
       
       const wrapper = document.getElementById('custom-remaining-wrapper');
-      if (rem < 0) { wrapper.className = "text-red-600"; }
-      else if (rem === 0) { wrapper.className = "text-green-600"; }
-      else { wrapper.className = "text-amber-600"; }
+      if (rem < -10) { wrapper.className = "flex items-center text-danger-600"; }
+      else if (Math.abs(rem) <= 10) { wrapper.className = "flex items-center text-success-600"; }
+      else { wrapper.className = "flex items-center text-warning-600"; }
     };
 
     // --- LỊCH SỬ ---
     const getBadgeColor = (source) => {
-      if(source === 'Grab') return 'bg-green-100 text-green-800 border-green-200';
-      if(source === 'ShopeeFood') return 'bg-orange-100 text-orange-800 border-orange-200';
-      if(source === 'Bên ngoài') return 'bg-blue-100 text-blue-800 border-blue-200';
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      if(source === 'Grab') return 'bg-success-100 text-success-800 border-success-200';
+      if(source === 'ShopeeFood') return 'bg-warning-100 text-warning-800 border-warning-200';
+      if(source === 'Bên ngoài') return 'bg-primary-100 text-primary-800 border-primary-200';
+      return 'bg-surface-100 text-surface-800 border-surface-200';
     };
 
     const renderHistory = () => {
@@ -666,7 +792,7 @@
       }).sort((a,b) => new Date(b.ngay) - new Date(a.ngay));
 
       if (filtered.length === 0) {
-        container.innerHTML = '<div class="text-center py-8 text-gray-500">Không tìm thấy giao dịch nào.</div>';
+        container.innerHTML = '<div class="text-center py-10 opacity-60"><svg class="w-16 h-16 mx-auto mb-3 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg><p class="font-medium text-surface-500">Chưa có giao dịch nào xuất hiện ở đây.</p></div>';
         return;
       }
 
@@ -676,49 +802,51 @@
         
         let detailsHtml = '';
         t.chiTiet.forEach(ct => {
-          if (ct.thanhVienId === t.nguoiTra) return; // Nguoi tra ko hien
+          if (ct.thanhVienId === t.nguoiTra) return;
           const mObj = members.find(m => m.id === ct.thanhVienId);
           const mName = mObj ? mObj.ten : ct.thanhVienId;
           const statusHtml = ct.daThanhToan 
-            ? `<span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Đã trả</span>`
-            : `<button onclick="markCtPaid('${ct.id}')" class="px-2 py-1 text-xs rounded border border-amber-500 text-amber-600 hover:bg-amber-50">Chưa trả (Click T.Toán)</button>`;
+            ? `<span class="px-2 py-1 text-[10px] uppercase font-bold rounded bg-success-50 text-success-600 border border-success-200">Đã trả</span>`
+            : `<button onclick="markCtPaid('${ct.id}')" class="px-3 py-1.5 text-xs font-semibold rounded border border-danger-200 bg-danger-50 text-danger-600 hover:bg-danger-100 transition shadow-sm touch-target outline-none">Check trả nợ</button>`;
             
           detailsHtml += `
-            <div class="flex justify-between items-center py-2 border-b last:border-0 border-gray-100">
-              <span class="text-sm">${mName}</span>
-              <div class="flex items-center space-x-3">
-                <span class="font-medium text-sm">${formatCurrency(ct.soTien)}</span>
+            <div class="flex justify-between items-center py-2.5 border-b last:border-0 border-surface-100">
+              <span class="text-sm font-medium text-surface-800">${mName}</span>
+              <div class="flex items-center space-x-4">
+                <span class="font-bold tabular-nums text-surface-900">${formatCurrency(ct.soTien)}</span>
                 ${statusHtml}
               </div>
             </div>
           `;
         });
-        if(!detailsHtml) detailsHtml = '<div class="text-xs text-gray-500 py-1">Trả cho chính mình</div>';
+        if(!detailsHtml) detailsHtml = '<div class="text-xs font-medium italic text-surface-500 py-2">Tự mua tự trả, không nợ ai.</div>';
 
         const card = document.createElement('div');
-        card.className = "bg-white rounded-lg shadow-sm border overflow-hidden transition hover:shadow-md";
+        card.className = "bg-white rounded-2xl border border-surface-100 overflow-hidden transition hover:shadow-md soft-shadow";
         card.innerHTML = `
-          <div class="p-4 sm:p-5 flex flex-col sm:flex-row justify-between sm:items-center cursor-pointer" onclick="toggleDetails('${t.id}')">
-            <div class="mb-3 sm:mb-0">
-              <div class="flex items-center space-x-2 mb-1">
-                <span class="text-xs font-medium text-gray-500">${formatDate(t.ngay)}</span>
-                <span class="px-2 py-0.5 rounded text-xs border ${getBadgeColor(t.nguon)}">${t.nguon}</span>
+          <div class="p-4 md:p-5 cursor-pointer touch-target h-auto items-start flex-col" onclick="toggleDetails('${t.id}')">
+            <div class="flex justify-between items-start mb-2 w-full">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeColor(t.nguon)}">${t.nguon}</span>
+                <span class="text-xs font-semibold text-surface-500">${formatDate(t.ngay)}</span>
               </div>
-              <h3 class="font-bold text-lg text-gray-900">${t.moTa}</h3>
-              <p class="text-sm text-gray-600 mt-1">Người chi: <span class="font-bold text-blue-600">${payerName}</span></p>
+              <span class="text-lg font-bold text-surface-900 tabular-nums leading-none">${formatCurrency(t.tongTien)}</span>
             </div>
-            <div class="flex justify-between sm:flex-col items-center sm:items-end">
-              <span class="text-xl font-bold text-gray-900 tabular-nums">${formatCurrency(t.tongTien)}</span>
-              <span class="text-xs text-gray-400 mt-1 cursor-pointer">▼ Chi tiết</span>
+            <div class="w-full text-left">
+              <h3 class="font-bold text-base text-surface-900 mb-1 leading-snug">${t.moTa}</h3>
+              <p class="text-sm text-surface-500">Đứng ra trả: <span class="font-bold text-primary-600">${payerName}</span></p>
             </div>
           </div>
-          <div id="detail-${t.id}" class="hidden border-t bg-gray-50 p-4 transition-all">
-            <div class="mb-4">
-              <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Chi Tiết Nợ</h4>
+          <div id="detail-${t.id}" class="hidden border-t border-surface-100 bg-surface-50 p-4 transition-all w-full">
+            <div class="mb-4 bg-white p-3 rounded-xl border border-surface-100">
+              <h4 class="text-xs font-bold text-surface-400 uppercase mb-2">Chi Tiết Nợ</h4>
               ${detailsHtml}
             </div>
-            <div class="text-right">
-              <button onclick="deleteTx('${t.id}')" class="text-xs text-red-600 hover:text-red-800 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded transition font-medium">🗑️ Xóa giao dịch này</button>
+            <div class="text-right mt-2 flex justify-end">
+              <button onclick="deleteTx('${t.id}')" class="text-xs text-danger-600 bg-white border border-danger-100 hover:bg-danger-50 px-4 py-2 touch-target rounded-lg font-semibold flex items-center transition shadow-sm outline-none">
+                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> 
+                 Xoá Bill
+              </button>
             </div>
           </div>
         `;
@@ -738,19 +866,19 @@
         await runAsync('markAsPaid', ctId);
         transactions = await runAsync('getTransactions');
         refreshUI();
-        showToast('Đã đánh dấu thanh toán');
+        showToast('Nợ đã được xí xóa');
       } catch(e) { showToast(e.message, 'error'); }
       finally { hideLoading(); }
     };
 
     window.deleteTx = async (txId) => {
-      if(!confirm("Bạn có chắc muốn xoá giao dịch này?")) return;
+      if(!confirm("Kế toán chú ý: Xóa bill này sẽ mất vĩnh viễn dữ liệu. Chắc chắn chứ?")) return;
       showLoading();
       try {
         await runAsync('deleteTransaction', txId);
         transactions = await runAsync('getTransactions');
         refreshUI();
-        showToast('Xoá thành công');
+        showToast('Bill đã bốc hơi');
       } catch(e) { showToast(e.message, 'error'); }
       finally { hideLoading(); }
     };
@@ -761,49 +889,50 @@
       container.innerHTML = '';
       
       members.forEach(m => {
-        // Calculate debts for this member
-        let owedToThem = 0;
-        let theyOwe = 0;
-        
+        let owedToThem = 0; let theyOwe = 0;
         transactions.forEach(tx => {
            tx.chiTiet.forEach(ct => {
               if(!ct.daThanhToan) {
-                 if(tx.nguoiTra === m.id && ct.thanhVienId !== m.id) {
-                    owedToThem += parseFloat(ct.soTien);
-                 }
-                 if(ct.thanhVienId === m.id && tx.nguoiTra !== m.id) {
-                    theyOwe += parseFloat(ct.soTien);
-                 }
+                 if(tx.nguoiTra === m.id && ct.thanhVienId !== m.id) { owedToThem += parseFloat(ct.soTien); }
+                 if(ct.thanhVienId === m.id && tx.nguoiTra !== m.id) { theyOwe += parseFloat(ct.soTien); }
               }
            });
         });
         
         const net = owedToThem - theyOwe;
-        const netColor = net > 0 ? 'text-green-600' : (net < 0 ? 'text-red-600' : 'text-gray-900');
+        let netColor = 'text-surface-900 border-surface-200 bg-surface-50';
+        let netBg = '';
+        if (net > 0) { netColor = 'text-success-700'; netBg = 'bg-success-50 border-success-200'; }
+        if (net < 0) { netColor = 'text-danger-700'; netBg = 'bg-danger-50 border-danger-200'; }
         
+        const initials = m.ten.substring(0, 2).toUpperCase();
+
         container.innerHTML += `
-          <div class="bg-white p-5 rounded-lg shadow-sm border relative">
-            <h3 class="font-bold text-lg mb-4 text-blue-800">${m.ten}</h3>
+          <div class="bg-white p-5 rounded-2xl soft-shadow border border-surface-100 flex flex-col justify-between">
+            <div class="flex items-center mb-5">
+              <div class="w-12 h-12 rounded-full bg-primary-100 text-primary-700 font-bold text-lg flex items-center justify-center mr-4 shadow-inner">${initials}</div>
+              <h3 class="font-bold text-lg text-surface-900 truncate">${m.ten}</h3>
+            </div>
             
-            <div class="space-y-2 text-sm mb-4">
-              <div class="flex justify-between">
-                <span class="text-gray-500">Phải trả (nợ):</span>
-                <span class="font-medium text-red-600">${formatCurrency(theyOwe)}</span>
+            <div class="space-y-3 mb-5">
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-surface-500 font-medium">Bị đòi (Nợ):</span>
+                <span class="font-bold tabular-nums ${theyOwe > 0 ? 'text-danger-600' : 'text-surface-500 text-opacity-50'}">${formatCurrency(theyOwe)}</span>
               </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500">Nhận lại (cho nợ):</span>
-                <span class="font-medium text-green-600">${formatCurrency(owedToThem)}</span>
-              </div>
-              <div class="pt-2 border-t flex justify-between font-bold">
-                <span class="text-gray-700">Tổng kết:</span>
-                <span class="${netColor}">${formatCurrency(Math.abs(net))} ${net >= 0 ? '(Dương)' : '(Âm)'}</span>
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-surface-500 font-medium">Thực thu (Ai nợ):</span>
+                <span class="font-bold tabular-nums ${owedToThem > 0 ? 'text-success-600' : 'text-surface-500 text-opacity-50'}">${formatCurrency(owedToThem)}</span>
               </div>
             </div>
             
-            <div class="mt-4 text-right">
-              <button onclick="removeMember('${m.id}')" ${theyOwe > 0 ? 'disabled title="Phải thanh toán nợ trước khi xoá"' : ''} 
-                      class="text-xs px-3 py-1.5 rounded transition ${theyOwe > 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 text-red-600 hover:bg-red-100'}">
-                Xóa
+            <div class="pt-4 border-t border-surface-100 flex justify-between items-center">
+              <div class="px-3 py-1.5 rounded-lg border ${netBg} ${netColor} font-bold text-sm tabular-nums">
+                T/c: ${net > 0 ? '+' : (net < 0 ? '-' : '')}${formatCurrency(Math.abs(net))}
+              </div>
+              
+              <button onclick="removeMember('${m.id}')" ${theyOwe > 0 ? 'disabled' : ''} 
+                      class="text-xs focus:outline-none flex font-semibold px-3 py-1.5 touch-target rounded-lg transition ${theyOwe > 0 ? 'text-surface-300 cursor-not-allowed hidden' : 'text-surface-400 bg-surface-50 border border-surface-100 hover:text-danger-600 hover:bg-danger-50 hover:border-danger-200 shadow-sm border-0'}">
+                Đuổi
               </button>
             </div>
           </div>
@@ -812,14 +941,14 @@
     };
 
     window.removeMember = async (id) => {
-      if(!confirm("Xác nhận xoá thành viên này?")) return;
+      if(!confirm("Khai trừ thành viên này ra khỏi chi tiêu team?")) return;
       showLoading();
       try {
         const res = await runAsync('removeMember', id);
         if(res.error) throw new Error(res.error);
         members = res;
         refreshUI();
-        showToast('Xoá thành công');
+        showToast('Bye bye!');
       } catch(e) { showToast(e.message, 'error'); }
       finally { hideLoading(); }
     };
