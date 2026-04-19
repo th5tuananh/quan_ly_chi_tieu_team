@@ -1,0 +1,617 @@
+<script>
+    // --- GLOBAL STATE ---
+    let members = [];
+    let transactions = [];
+    let splitMode = 'even'; // 'even' | 'custom'
+
+    // --- UTILS ---
+    const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
+    const formatDate = (isoStr) => {
+      if(!isoStr) return '';
+      const d = new Date(isoStr);
+      return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} • ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    };
+
+    const showLoading = () => {
+      const el = document.getElementById('loading');
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.remove('opacity-0'), 10);
+    };
+    const hideLoading = () => {
+      const el = document.getElementById('loading');
+      el.classList.add('opacity-0');
+      setTimeout(() => el.classList.add('hidden'), 300);
+    };
+
+    const showToast = (msg, type = 'success') => {
+      const el = document.createElement('div');
+      const isSuccess = type === 'success';
+      const bgColor = isSuccess ? 'bg-surface-900' : 'bg-danger-600';
+      const icon = isSuccess
+        ? `<svg class="w-5 h-5 text-success-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`
+        : `<svg class="w-5 h-5 text-white mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+
+      el.className = `toast ${bgColor} text-white px-4 py-3 rounded-xl shadow-xl flex items-center max-w-sm w-fit font-medium text-sm`;
+      el.innerHTML = `${icon}<span>${msg}</span>`;
+      document.getElementById('toast-container').appendChild(el);
+
+      setTimeout(() => el.classList.add('show'), 10);
+      setTimeout(() => {
+        el.classList.remove('show');
+        setTimeout(() => el.remove(), 300);
+      }, 3500);
+    };
+
+    const runAsync = (funcName, ...args) => {
+      return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(res => {
+            try {
+              resolve(typeof res === 'string' && (res.startsWith('[') || res.startsWith('{')) ? JSON.parse(res) : res);
+            } catch(e) { resolve(res); }
+          })
+          .withFailureHandler(reject)
+          [funcName](...args);
+      });
+    };
+
+    // --- INIT ---
+    document.addEventListener('DOMContentLoaded', async () => {
+      document.getElementById('tx-date').valueAsDate = new Date();
+      setupTabs();
+      setupSplitForm();
+
+      try {
+        showLoading();
+        const [memRes, txRes] = await Promise.all([
+          runAsync('getMembers'),
+          runAsync('getTransactions')
+        ]);
+
+        if (memRes.error) throw new Error(memRes.error);
+        if (txRes.error) throw new Error(txRes.error);
+
+        members = memRes;
+        transactions = txRes;
+
+        refreshUI();
+      } catch (err) {
+        showToast(err.message || "Lỗi tải dữ liệu", 'error');
+      } finally {
+        hideLoading();
+      }
+
+      // Filters
+      document.getElementById('filter-search').addEventListener('input', renderHistory);
+      document.getElementById('filter-source').addEventListener('change', renderHistory);
+      document.getElementById('btn-refresh-history').addEventListener('click', async () => {
+        showLoading();
+        const txRes = await runAsync('getTransactions');
+        if(!txRes.error) {
+           transactions = txRes;
+           refreshUI();
+        }
+        hideLoading();
+      });
+
+      // Member
+      document.getElementById('btn-add-member').addEventListener('click', async () => {
+        const nameInput = document.getElementById('new-member-name');
+        const name = nameInput.value.trim();
+        if(!name) return;
+        showLoading();
+        try {
+          const res = await runAsync('addMember', name);
+          if(res.error) throw new Error(res.error);
+          members = res;
+          nameInput.value = '';
+          refreshUI();
+          showToast('Đã chốt thêm người này');
+        } catch(e) {
+          showToast(e.message, 'error');
+        } finally {
+          hideLoading();
+        }
+      });
+    });
+
+    const refreshUI = async () => {
+      renderMembersTab();
+      updatePayerDropdown();
+      renderSplitList();
+      renderHistory();
+      await updateDashboard();
+    };
+
+    // --- TABS ---
+    const setupTabs = () => {
+      const tabs = document.querySelectorAll('.nav-tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const targetId = tab.dataset.target;
+          // reset all
+          document.querySelectorAll('.nav-tab').forEach(t => {
+            if(t.classList.contains('mobile-tab')) {
+              t.classList.remove('text-primary-600');
+              t.classList.add('text-surface-400');
+            } else {
+              t.classList.remove('border-primary-600', 'text-primary-600');
+              t.classList.add('border-transparent', 'text-gray-500');
+            }
+          });
+          // activate matched
+          document.querySelectorAll(`.nav-tab[data-target="${targetId}"]`).forEach(t => {
+            if(t.classList.contains('mobile-tab')) {
+              t.classList.remove('text-surface-400');
+              t.classList.add('text-primary-600');
+            } else {
+              t.classList.remove('border-transparent', 'text-gray-500');
+              t.classList.add('border-primary-600', 'text-primary-600');
+            }
+          });
+
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+          document.getElementById(targetId).classList.add('active');
+          window.scrollTo({top:0, behavior:'smooth'});
+        });
+      });
+    };
+
+    // --- DASHBOARD ---
+    const updateDashboard = async () => {
+      document.getElementById('overview-member-count').innerText = members.length;
+
+      let unpaidCount = 0;
+      transactions.forEach(tx => {
+        let hasUnpaid = false;
+        tx.chiTiet.forEach(ct => {
+          if (!ct.daThanhToan && ct.thanhVienId !== tx.nguoiTra) hasUnpaid = true;
+        });
+        if (hasUnpaid) unpaidCount++;
+      });
+      document.getElementById('overview-unpaid-tx').innerText = unpaidCount;
+
+      try {
+        const summary = await runAsync('getSummary'); // [{from, fromName, to, toName, amount}]
+        if(summary.error) throw new Error(summary.error);
+
+        let grandTotal = 0;
+        const tbodyDesktop = document.getElementById('debt-summary-desktop');
+        const containerMobile = document.getElementById('debt-summary-mobile');
+        tbodyDesktop.innerHTML = '';
+        containerMobile.innerHTML = '';
+
+        if (summary.length === 0) {
+          const emptyHtml = `<tr><td colspan="4" class="px-6 py-8 text-center text-sm font-medium text-surface-500">🎉 Tuyệt vời! Không ai nợ ai.</td></tr>`;
+          tbodyDesktop.innerHTML = emptyHtml;
+          containerMobile.innerHTML = `<div class="p-6 text-center text-sm font-medium text-surface-500">🎉 Không có khoản nợ nào.</div>`;
+        } else {
+          summary.forEach(s => {
+            grandTotal += s.amount;
+            const isHigh = s.amount > 100000;
+            const amtClass = isHigh ? 'text-danger-600' : 'text-surface-900';
+
+            // Initial generator
+            const fromInit = s.fromName.substring(0, 2).toUpperCase();
+            const toInit = s.toName.substring(0, 2).toUpperCase();
+
+            // Desktop Row
+            tbodyDesktop.innerHTML += `
+              <tr class="hover:bg-surface-50 transition">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-surface-900 flex items-center"><div class="w-6 h-6 rounded-full bg-danger-100 text-danger-700 font-bold text-[10px] flex items-center justify-center mr-2">${fromInit}</div>${s.fromName}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-surface-600">Trả <span class="font-bold text-surface-900">${s.toName}</span></td>
+                <td class="px-6 py-4 whitespace-nowrap text-right font-bold tabular-nums text-base ${amtClass}">${formatCurrency(s.amount)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-center">
+                  <button class="text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 px-3 py-1.5 rounded-lg transition active:scale-95 border-0" onclick="markPairPaid('${s.from}', '${s.to}')">Xác nhận xong ✓</button>
+                </td>
+              </tr>
+            `;
+            // Mobile Row
+            containerMobile.innerHTML += `
+              <div class="p-4 flex flex-col space-y-3">
+                <div class="flex justify-between items-center">
+                  <div class="flex items-center space-x-2">
+                    <span class="font-bold text-surface-900">${s.fromName}</span>
+                    <svg class="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    <span class="font-medium text-surface-600">${s.toName}</span>
+                  </div>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="font-bold tabular-nums text-lg ${amtClass}">${formatCurrency(s.amount)}</span>
+                  <button class="text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 px-4 py-2 touch-target rounded-lg transition border-0" onclick="markPairPaid('${s.from}', '${s.to}')">Xác nhận ✓</button>
+                </div>
+              </div>
+            `;
+          });
+        }
+        document.getElementById('overview-total-debt').innerText = formatCurrency(grandTotal);
+
+        let maxDebt = 0, topDebtorName = '-';
+        let maxCred = 0, topCredName = '-';
+        const netOwed = {}; const netOws = {};
+
+        summary.forEach(s => {
+           netOwed[s.fromName] = (netOwed[s.fromName] || 0) + s.amount;
+           netOws[s.toName] = (netOws[s.toName] || 0) + s.amount;
+        });
+
+        for(const n in netOwed) { if(netOwed[n] > maxDebt) { maxDebt = netOwed[n]; topDebtorName = `${n} (${formatCurrency(maxDebt)})`; } }
+        for(const n in netOws) { if(netOws[n] > maxCred) { maxCred = netOws[n]; topCredName = `${n} (${formatCurrency(maxCred)})`; } }
+
+        document.getElementById('stat-top-debtor').innerText = topDebtorName;
+        document.getElementById('stat-top-creditor').innerText = topCredName;
+
+      } catch(e) {}
+    };
+
+    window.markPairPaid = async (debtorId, creditorId) => {
+      showLoading();
+      try {
+        await runAsync('markAllPaidForMember', debtorId, creditorId);
+        transactions = await runAsync('getTransactions');
+        refreshUI();
+        showToast('Chốt đơn thành công');
+      } catch(e) { showToast(e.message, 'error'); }
+      finally { hideLoading(); }
+    };
+
+    // --- TẠO ĐƠN ---
+    const updatePayerDropdown = () => {
+      const sel = document.getElementById('tx-payer');
+      sel.innerHTML = '<option value="">-- Chọn ai trả? --</option>';
+      members.forEach(m => {
+        sel.innerHTML += `<option value="${m.id}">${m.ten}</option>`;
+      });
+    };
+
+    const setupSplitForm = () => {
+      const btnEven = document.getElementById('mode-even');
+      const btnCustom = document.getElementById('mode-custom');
+      const info = document.getElementById('custom-split-info');
+
+      btnEven.onclick = () => {
+        splitMode = 'even';
+        btnEven.className = "flex-1 px-4 py-2 text-sm rounded-md bg-white shadow-sm font-semibold text-surface-900 transition min-w-[90px] border-0";
+        btnCustom.className = "flex-1 px-4 py-2 text-sm rounded-md text-surface-500 font-medium hover:text-surface-900 transition min-w-[90px] border-0";
+        info.classList.add('hidden');
+        info.classList.remove('flex');
+        renderSplitList();
+      };
+
+      btnCustom.onclick = () => {
+        splitMode = 'custom';
+        btnCustom.className = "flex-1 px-4 py-2 text-sm rounded-md bg-white shadow-sm font-semibold text-surface-900 transition min-w-[90px] border-0";
+        btnEven.className = "flex-1 px-4 py-2 text-sm rounded-md text-surface-500 font-medium hover:text-surface-900 transition min-w-[90px] border-0";
+        info.classList.remove('hidden');
+        info.classList.add('flex');
+        renderSplitList();
+      };
+
+      document.getElementById('tx-select-all').addEventListener('change', (e) => {
+        document.querySelectorAll('.split-check').forEach(cb => cb.checked = e.target.checked);
+        calcEvenSplit();
+        calcCustomSplit();
+      });
+
+      document.getElementById('tx-total').addEventListener('input', () => {
+        if(splitMode === 'even') calcEvenSplit();
+        else calcCustomSplit();
+      });
+
+      document.getElementById('form-new-tx').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payer = document.getElementById('tx-payer').value;
+        const date = document.getElementById('tx-date').value;
+        const desc = document.getElementById('tx-desc').value;
+        const total = parseFloat(document.getElementById('tx-total').value);
+        const source = document.querySelector('input[name="tx-source"]:checked').value;
+
+        const chiTiet = [];
+        let sum = 0;
+
+        document.querySelectorAll('.split-check').forEach(cb => {
+          if (cb.checked) {
+            const mId = cb.dataset.id;
+            let amt = 0;
+            if (splitMode === 'even') {
+              amt = parseFloat(document.getElementById(`split-amt-${mId}`).innerText.replace(/\D/g, ''));
+            } else {
+              amt = parseFloat(document.getElementById(`split-input-${mId}`).value || 0);
+            }
+            sum += amt;
+            chiTiet.push({thanhVienId: mId, soTien: amt});
+          }
+        });
+
+        if (chiTiet.length === 0) return showToast("Mời đại ca chọn người chia bill!", "error");
+        if (Math.abs(sum - total) > 10) return showToast(`Tính tổng tiền chia chưa khớp bill (${formatCurrency(sum)} / ${formatCurrency(total)})`, "error");
+
+        showLoading();
+        try {
+          const res = await runAsync('addTransaction', JSON.stringify({
+            nguoiTra: payer, ngay: date, moTa: desc, tongTien: total, nguon: source, chiTiet
+          }));
+          if (res.error) throw new Error(res.error);
+
+          showToast("Bill đã được phát hành! 🚀");
+          document.getElementById('form-new-tx').reset();
+          document.getElementById('tx-date').valueAsDate = new Date();
+          transactions = await runAsync('getTransactions');
+          refreshUI();
+          document.querySelector('.nav-tab[data-target="tab-lich-su"]').click();
+
+        } catch(err) {
+          showToast(err.message, "error");
+        } finally {
+          hideLoading();
+        }
+      });
+    };
+
+    const renderSplitList = () => {
+      const container = document.getElementById('split-list');
+      container.innerHTML = '';
+
+      members.forEach(m => {
+        const div = document.createElement('div');
+        div.className = "flex items-center justify-between p-3 border border-surface-200 rounded-xl bg-white hover:bg-surface-50 transition";
+
+        let rightSide = '';
+        if (splitMode === 'even') {
+          rightSide = `<span id="split-amt-${m.id}" class="font-bold text-surface-900 tabular-nums">0 đ</span>`;
+        } else {
+          rightSide = `<div class="relative"><input type="number" id="split-input-${m.id}" min="0" placeholder="0" class="border border-surface-300 touch-target w-28 text-right rounded-lg pl-2 pr-6 tabular-nums font-medium focus:ring-2 focus:ring-primary-500 outline-none" oninput="calcCustomSplit()"><span class="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-surface-500 text-sm">đ</span></div>`;
+        }
+
+        const initials = m.ten.substring(0,2).toUpperCase();
+
+        div.innerHTML = `
+          <label class="flex items-center cursor-pointer flex-grow touch-target mr-4 mb-0 w-auto">
+            <input type="checkbox" class="split-check sr-only pill-checkbox" data-id="${m.id}" checked onchange="calcEvenSplit(); calcCustomSplit();">
+            <div class="w-6 h-6 mr-3 rounded border-2 border-surface-300 flex items-center justify-center bg-white transition relative flex-shrink-0">
+               <svg class="w-4 h-4 text-primary-600 opacity-0 transform scale-50 transition-all duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center mr-3 flex-shrink-0">${initials}</div>
+            <span class="font-semibold text-surface-800">${m.ten}</span>
+          </label>
+          <div class="flex items-center">
+            ${rightSide}
+          </div>
+        `;
+        container.appendChild(div);
+      });
+      if(splitMode === 'even') calcEvenSplit();
+      else calcCustomSplit();
+    };
+
+    const calcEvenSplit = () => {
+      if(splitMode !== 'even') return;
+      const total = parseFloat(document.getElementById('tx-total').value || 0);
+      const cbs = document.querySelectorAll('.split-check:checked');
+      const count = cbs.length;
+
+      if(count === 0) {
+        document.querySelectorAll("[id^='split-amt-']").forEach(el => el.innerText = '0 đ');
+        return;
+      }
+
+      const amtPerPerson = Math.round(total / count);
+      let applied = 0;
+
+      const checkedArr = Array.from(cbs);
+      checkedArr.forEach((cb, idx) => {
+        const mId = cb.dataset.id;
+        let amt = amtPerPerson;
+        if (idx === count - 1) amt = total - applied;
+        document.getElementById(`split-amt-${mId}`).innerText = formatCurrency(amt);
+        applied += amtPerPerson;
+      });
+
+      document.querySelectorAll('.split-check:not(:checked)').forEach(cb => {
+         document.getElementById(`split-amt-${cb.dataset.id}`).innerText = '0 đ';
+      });
+    };
+
+    window.calcCustomSplit = () => {
+      if(splitMode !== 'custom') return;
+      const total = parseFloat(document.getElementById('tx-total').value || 0);
+      let sum = 0;
+      document.querySelectorAll('.split-check:checked').forEach(cb => {
+         const mId = cb.dataset.id;
+         const val = parseFloat(document.getElementById(`split-input-${mId}`).value || 0);
+         sum += val;
+      });
+
+      document.getElementById('custom-subtotal').innerText = new Intl.NumberFormat('vi-VN').format(sum);
+      const rem = total - sum;
+      document.getElementById('custom-remaining').innerText = new Intl.NumberFormat('vi-VN').format(rem);
+
+      const wrapper = document.getElementById('custom-remaining-wrapper');
+      if (rem < -10) { wrapper.className = "flex items-center text-danger-600"; }
+      else if (Math.abs(rem) <= 10) { wrapper.className = "flex items-center text-success-600"; }
+      else { wrapper.className = "flex items-center text-warning-600"; }
+    };
+
+    // --- LỊCH SỬ ---
+    const getBadgeColor = (source) => {
+      if(source === 'Grab') return 'bg-success-100 text-success-800 border-success-200';
+      if(source === 'ShopeeFood') return 'bg-warning-100 text-warning-800 border-warning-200';
+      if(source === 'Bên ngoài') return 'bg-primary-100 text-primary-800 border-primary-200';
+      return 'bg-surface-100 text-surface-800 border-surface-200';
+    };
+
+    const renderHistory = () => {
+      const container = document.getElementById('history-list');
+      const search = document.getElementById('filter-search').value.toLowerCase();
+      const source = document.getElementById('filter-source').value;
+
+      container.innerHTML = '';
+
+      const filtered = transactions.filter(t => {
+        if(source && t.nguon !== source) return false;
+        if(search && !t.moTa.toLowerCase().includes(search)) return false;
+        return true;
+      }).sort((a,b) => new Date(b.ngay) - new Date(a.ngay));
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="text-center py-10 opacity-60"><svg class="w-16 h-16 mx-auto mb-3 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg><p class="font-medium text-surface-500">Chưa có giao dịch nào xuất hiện ở đây.</p></div>';
+        return;
+      }
+
+      filtered.forEach(t => {
+        const payerObj = members.find(m => m.id === t.nguoiTra);
+        const payerName = payerObj ? payerObj.ten : t.nguoiTra;
+
+        let detailsHtml = '';
+        t.chiTiet.forEach(ct => {
+          if (ct.thanhVienId === t.nguoiTra) return;
+          const mObj = members.find(m => m.id === ct.thanhVienId);
+          const mName = mObj ? mObj.ten : ct.thanhVienId;
+          const statusHtml = ct.daThanhToan
+            ? `<span class="px-2 py-1 text-[10px] uppercase font-bold rounded bg-success-50 text-success-600 border border-success-200">Đã trả</span>`
+            : `<button onclick="markCtPaid('${ct.id}')" class="px-3 py-1.5 text-xs font-semibold rounded border border-danger-200 bg-danger-50 text-danger-600 hover:bg-danger-100 transition shadow-sm touch-target outline-none">Check trả nợ</button>`;
+
+          detailsHtml += `
+            <div class="flex justify-between items-center py-2.5 border-b last:border-0 border-surface-100">
+              <span class="text-sm font-medium text-surface-800">${mName}</span>
+              <div class="flex items-center space-x-4">
+                <span class="font-bold tabular-nums text-surface-900">${formatCurrency(ct.soTien)}</span>
+                ${statusHtml}
+              </div>
+            </div>
+          `;
+        });
+        if(!detailsHtml) detailsHtml = '<div class="text-xs font-medium italic text-surface-500 py-2">Tự mua tự trả, không nợ ai.</div>';
+
+        const card = document.createElement('div');
+        card.className = "bg-white rounded-2xl border border-surface-100 overflow-hidden transition hover:shadow-md soft-shadow";
+        card.innerHTML = `
+          <div class="p-4 md:p-5 cursor-pointer touch-target h-auto items-start flex-col" onclick="toggleDetails('${t.id}')">
+            <div class="flex justify-between items-start mb-2 w-full">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeColor(t.nguon)}">${t.nguon}</span>
+                <span class="text-xs font-semibold text-surface-500">${formatDate(t.ngay)}</span>
+              </div>
+              <span class="text-lg font-bold text-surface-900 tabular-nums leading-none">${formatCurrency(t.tongTien)}</span>
+            </div>
+            <div class="w-full text-left">
+              <h3 class="font-bold text-base text-surface-900 mb-1 leading-snug">${t.moTa}</h3>
+              <p class="text-sm text-surface-500">Đứng ra trả: <span class="font-bold text-primary-600">${payerName}</span></p>
+            </div>
+          </div>
+          <div id="detail-${t.id}" class="hidden border-t border-surface-100 bg-surface-50 p-4 transition-all w-full">
+            <div class="mb-4 bg-white p-3 rounded-xl border border-surface-100">
+              <h4 class="text-xs font-bold text-surface-400 uppercase mb-2">Chi Tiết Nợ</h4>
+              ${detailsHtml}
+            </div>
+            <div class="text-right mt-2 flex justify-end">
+              <button onclick="deleteTx('${t.id}')" class="text-xs text-danger-600 bg-white border border-danger-100 hover:bg-danger-50 px-4 py-2 touch-target rounded-lg font-semibold flex items-center transition shadow-sm outline-none">
+                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                 Xoá Bill
+              </button>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    };
+
+    window.toggleDetails = (id) => {
+      const el = document.getElementById(`detail-${id}`);
+      el.classList.toggle('hidden');
+    };
+
+    window.markCtPaid = async (ctId) => {
+      event.stopPropagation();
+      showLoading();
+      try {
+        await runAsync('markAsPaid', ctId);
+        transactions = await runAsync('getTransactions');
+        refreshUI();
+        showToast('Nợ đã được xí xóa');
+      } catch(e) { showToast(e.message, 'error'); }
+      finally { hideLoading(); }
+    };
+
+    window.deleteTx = async (txId) => {
+      if(!confirm("Kế toán chú ý: Xóa bill này sẽ mất vĩnh viễn dữ liệu. Chắc chắn chứ?")) return;
+      showLoading();
+      try {
+        await runAsync('deleteTransaction', txId);
+        transactions = await runAsync('getTransactions');
+        refreshUI();
+        showToast('Bill đã bốc hơi');
+      } catch(e) { showToast(e.message, 'error'); }
+      finally { hideLoading(); }
+    };
+
+    // --- THÀNH VIÊN ---
+    const renderMembersTab = () => {
+      const container = document.getElementById('member-cards');
+      container.innerHTML = '';
+
+      members.forEach(m => {
+        let owedToThem = 0; let theyOwe = 0;
+        transactions.forEach(tx => {
+           tx.chiTiet.forEach(ct => {
+              if(!ct.daThanhToan) {
+                 if(tx.nguoiTra === m.id && ct.thanhVienId !== m.id) { owedToThem += parseFloat(ct.soTien); }
+                 if(ct.thanhVienId === m.id && tx.nguoiTra !== m.id) { theyOwe += parseFloat(ct.soTien); }
+              }
+           });
+        });
+
+        const net = owedToThem - theyOwe;
+        let netColor = 'text-surface-900 border-surface-200 bg-surface-50';
+        let netBg = '';
+        if (net > 0) { netColor = 'text-success-700'; netBg = 'bg-success-50 border-success-200'; }
+        if (net < 0) { netColor = 'text-danger-700'; netBg = 'bg-danger-50 border-danger-200'; }
+
+        const initials = m.ten.substring(0, 2).toUpperCase();
+
+        container.innerHTML += `
+          <div class="bg-white p-5 rounded-2xl soft-shadow border border-surface-100 flex flex-col justify-between">
+            <div class="flex items-center mb-5">
+              <div class="w-12 h-12 rounded-full bg-primary-100 text-primary-700 font-bold text-lg flex items-center justify-center mr-4 shadow-inner">${initials}</div>
+              <h3 class="font-bold text-lg text-surface-900 truncate">${m.ten}</h3>
+            </div>
+
+            <div class="space-y-3 mb-5">
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-surface-500 font-medium">Bị đòi (Nợ):</span>
+                <span class="font-bold tabular-nums ${theyOwe > 0 ? 'text-danger-600' : 'text-surface-500 text-opacity-50'}">${formatCurrency(theyOwe)}</span>
+              </div>
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-surface-500 font-medium">Thực thu (Ai nợ):</span>
+                <span class="font-bold tabular-nums ${owedToThem > 0 ? 'text-success-600' : 'text-surface-500 text-opacity-50'}">${formatCurrency(owedToThem)}</span>
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-surface-100 flex justify-between items-center">
+              <div class="px-3 py-1.5 rounded-lg border ${netBg} ${netColor} font-bold text-sm tabular-nums">
+                T/c: ${net > 0 ? '+' : (net < 0 ? '-' : '')}${formatCurrency(Math.abs(net))}
+              </div>
+
+              <button onclick="removeMember('${m.id}')" ${theyOwe > 0 ? 'disabled' : ''}
+                      class="text-xs focus:outline-none flex font-semibold px-3 py-1.5 touch-target rounded-lg transition ${theyOwe > 0 ? 'text-surface-300 cursor-not-allowed hidden' : 'text-surface-400 bg-surface-50 border border-surface-100 hover:text-danger-600 hover:bg-danger-50 hover:border-danger-200 shadow-sm border-0'}">
+                Đuổi
+              </button>
+            </div>
+          </div>
+        `;
+      });
+    };
+
+    window.removeMember = async (id) => {
+      if(!confirm("Khai trừ thành viên này ra khỏi chi tiêu team?")) return;
+      showLoading();
+      try {
+        const res = await runAsync('removeMember', id);
+        if(res.error) throw new Error(res.error);
+        members = res;
+        refreshUI();
+        showToast('Bye bye!');
+      } catch(e) { showToast(e.message, 'error'); }
+      finally { hideLoading(); }
+    };
+  </script>

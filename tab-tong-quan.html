@@ -1,0 +1,71 @@
+<div id="tab-tong-quan" class="tab-content active">
+  <!-- Top Metrics -->
+  <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+    <div class="glass-card p-5 rounded-2xl">
+      <div class="flex items-center space-x-2 mb-2">
+        <div class="p-1.5 bg-danger-50 text-danger-500 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg></div>
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng nợ tồn</h3>
+      </div>
+      <p class="text-2xl font-bold text-danger-600 tabular-nums truncate" id="overview-total-debt">0 đ</p>
+    </div>
+    <div class="glass-card p-5 rounded-2xl">
+      <div class="flex items-center space-x-2 mb-2">
+        <div class="p-1.5 bg-warning-50 text-warning-600 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Đơn chưa trả</h3>
+      </div>
+      <p class="text-2xl font-bold text-gray-900 tabular-nums" id="overview-unpaid-tx">0</p>
+    </div>
+    <div class="glass-card p-5 rounded-2xl col-span-2 md:col-span-1 flex flex-row md:flex-col justify-between items-center md:items-start">
+      <div class="flex items-center space-x-2 mb-0 md:mb-2 text-primary-600">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+        <h3 class="text-xs font-semibold uppercase tracking-wider">Thành viên</h3>
+      </div>
+      <p class="text-2xl font-bold text-gray-900 tabular-nums" id="overview-member-count">0</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Ai nợ ai -->
+    <div class="lg:col-span-2 space-y-4">
+      <div class="flex justify-between items-end">
+        <h2 class="text-lg font-bold text-surface-900">Chi tiết Ai Nợ Ai</h2>
+      </div>
+      <div class="glass-card rounded-2xl overflow-hidden soft-shadow bg-white">
+        <div class="hidden md:block overflow-x-auto">
+          <table class="min-w-full divide-y divide-surface-200">
+            <thead class="bg-surface-50">
+              <tr>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Người nợ</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Chủ nợ</th>
+                <th class="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Số tiền</th>
+                <th class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Hành trình</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-surface-100 bg-white" id="debt-summary-desktop">
+              <!-- render here for desktop -->
+            </tbody>
+          </table>
+        </div>
+        <!-- Mobile View For Debts -->
+        <div class="md:hidden divide-y divide-surface-100" id="debt-summary-mobile">
+          <!-- render here for mobile -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Thống kê nhanh / Top -->
+    <div class="glass-card p-6 rounded-2xl h-fit bg-white">
+      <h2 class="text-base font-bold mb-5 flex items-center"><svg class="w-5 h-5 mr-2 text-warning-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg> Kỷ lục Tạm Thời</h2>
+      <div class="space-y-4">
+        <div class="bg-danger-50/50 p-3 rounded-xl border border-danger-100">
+          <span class="text-xs font-semibold text-danger-700 uppercase block mb-1">Nợ nhiều nhất</span>
+          <div id="stat-top-debtor" class="font-bold text-danger-600 text-sm tabular-nums">-</div>
+        </div>
+        <div class="bg-success-50/50 p-3 rounded-xl border border-success-100">
+          <span class="text-xs font-semibold text-success-700 uppercase block mb-1">Chủ nợ lớn nhất</span>
+          <div id="stat-top-creditor" class="font-bold text-success-600 text-sm tabular-nums">-</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

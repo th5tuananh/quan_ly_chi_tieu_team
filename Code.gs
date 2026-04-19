@@ -4,9 +4,14 @@
 const MY_SPREADSHEET_ID = '';
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index.html')
+  return HtmlService.createTemplateFromFile('index')
+    .evaluate()
     .setTitle('Quản Lý Chi Tiêu Team')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
 function initializeSpreadsheet() {
