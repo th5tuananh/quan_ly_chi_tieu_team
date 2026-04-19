@@ -28,10 +28,44 @@
       return BOM + rows.join('\n');
     };
 
+    const simplifyDebts = (summaryData) => {
+      if (!summaryData.length) return [];
+
+      const nameMap = {};
+      const balance = {};
+
+      summaryData.forEach(s => {
+        nameMap[s.from] = s.fromName;
+        nameMap[s.to] = s.toName;
+        balance[s.from] = (balance[s.from] || 0) - s.amount;
+        balance[s.to] = (balance[s.to] || 0) + s.amount;
+      });
+
+      const result = [];
+      const b = { ...balance };
+
+      for (let i = 0; i < 1000; i++) {
+        Object.keys(b).forEach(k => { if (Math.abs(b[k]) < 1) delete b[k]; });
+        if (!Object.keys(b).length) break;
+
+        const entries = Object.entries(b);
+        const [maxId, maxAmt] = entries.reduce((a, c) => c[1] > a[1] ? c : a);
+        const [minId, minAmt] = entries.reduce((a, c) => c[1] < a[1] ? c : a);
+        if (maxAmt <= 0 || minAmt >= 0) break;
+
+        const transfer = Math.min(maxAmt, -minAmt);
+        result.push({ from: minId, fromName: nameMap[minId], to: maxId, toName: nameMap[maxId], amount: Math.round(transfer) });
+        b[maxId] -= transfer;
+        b[minId] += transfer;
+      }
+      return result;
+    };
+
     // --- GLOBAL STATE ---
     let members = [];
     let transactions = [];
     let splitMode = 'even'; // 'even' | 'custom'
+    let isDebtOptimized = false;
 
     // --- UTILS ---
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
@@ -121,6 +155,23 @@
            refreshUI();
         }
         hideLoading();
+      });
+
+      // Optimize debt toggle
+      document.getElementById('btn-optimize-debt').addEventListener('click', () => {
+        isDebtOptimized = !isDebtOptimized;
+        const btn = document.getElementById('btn-optimize-debt');
+        const label = document.getElementById('optimize-label');
+        if (isDebtOptimized) {
+          btn.classList.add('border-primary-400', 'text-primary-600', 'bg-primary-50');
+          btn.classList.remove('bg-white', 'text-surface-600');
+          label.textContent = 'Đang tối ưu';
+        } else {
+          btn.classList.remove('border-primary-400', 'text-primary-600', 'bg-primary-50');
+          btn.classList.add('bg-white', 'text-surface-600');
+          label.textContent = 'Tối ưu hóa';
+        }
+        updateDashboard();
       });
 
       // Export CSV
@@ -218,18 +269,27 @@
         const summary = await runAsync('getSummary'); // [{from, fromName, to, toName, amount}]
         if(summary.error) throw new Error(summary.error);
 
+        const displayData = isDebtOptimized ? simplifyDebts(summary) : summary;
+        const badge = document.getElementById('optimize-badge');
+        if (isDebtOptimized && summary.length > 0) {
+          badge.classList.remove('hidden');
+          badge.textContent = `Tối ưu: ${displayData.length} giao dịch thay vì ${summary.length}`;
+        } else {
+          badge.classList.add('hidden');
+        }
+
         let grandTotal = 0;
         const tbodyDesktop = document.getElementById('debt-summary-desktop');
         const containerMobile = document.getElementById('debt-summary-mobile');
         tbodyDesktop.innerHTML = '';
         containerMobile.innerHTML = '';
 
-        if (summary.length === 0) {
+        if (displayData.length === 0) {
           const emptyHtml = `<tr><td colspan="4" class="px-6 py-8 text-center text-sm font-medium text-surface-500">🎉 Tuyệt vời! Không ai nợ ai.</td></tr>`;
           tbodyDesktop.innerHTML = emptyHtml;
           containerMobile.innerHTML = `<div class="p-6 text-center text-sm font-medium text-surface-500">🎉 Không có khoản nợ nào.</div>`;
         } else {
-          summary.forEach(s => {
+          displayData.forEach(s => {
             grandTotal += s.amount;
             const isHigh = s.amount > 100000;
             const amtClass = isHigh ? 'text-danger-600' : 'text-surface-900';

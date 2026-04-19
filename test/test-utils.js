@@ -60,3 +60,81 @@ assert(csv.includes('Tuấn Anh'), 'CSV chứa tên người chia');
 assert(csv.includes('Đã trả'), 'CSV chứa trạng thái Đã trả');
 assert(csv.includes('Chưa trả'), 'CSV chứa trạng thái Chưa trả');
 console.log('\n✓ Tất cả CSV tests passed!');
+
+// ===== TEST: simplifyDebts =====
+function simplifyDebts(summaryData) {
+  if (!summaryData.length) return [];
+
+  const nameMap = {};
+  const balance = {};
+
+  summaryData.forEach(s => {
+    nameMap[s.from] = s.fromName;
+    nameMap[s.to] = s.toName;
+    balance[s.from] = (balance[s.from] || 0) - s.amount;
+    balance[s.to] = (balance[s.to] || 0) + s.amount;
+  });
+
+  const result = [];
+  const b = { ...balance };
+
+  for (let i = 0; i < 1000; i++) {
+    Object.keys(b).forEach(k => { if (Math.abs(b[k]) < 1) delete b[k]; });
+    if (!Object.keys(b).length) break;
+
+    const entries = Object.entries(b);
+    const [maxId, maxAmt] = entries.reduce((a, c) => c[1] > a[1] ? c : a);
+    const [minId, minAmt] = entries.reduce((a, c) => c[1] < a[1] ? c : a);
+    if (maxAmt <= 0 || minAmt >= 0) break;
+
+    const transfer = Math.min(maxAmt, -minAmt);
+    result.push({ from: minId, fromName: nameMap[minId], to: maxId, toName: nameMap[maxId], amount: Math.round(transfer) });
+    b[maxId] -= transfer;
+    b[minId] += transfer;
+  }
+  return result;
+}
+
+// Test 1: Chain A→B→C nên collapse thành A→C
+const chainInput = [
+  { from: 'TV001', fromName: 'A', to: 'TV002', toName: 'B', amount: 100000 },
+  { from: 'TV002', fromName: 'B', to: 'TV003', toName: 'C', amount: 100000 },
+];
+const chainResult = simplifyDebts(chainInput);
+assert(chainResult.length === 1, 'Chain A→B→C collapse còn 1 transaction');
+assert(chainResult[0].from === 'TV001', 'Chain: A là debtor');
+assert(chainResult[0].to === 'TV003', 'Chain: C là creditor');
+assert(chainResult[0].amount === 100000, 'Chain: amount đúng 100000');
+
+// Test 2: Empty input
+assert(simplifyDebts([]).length === 0, 'Empty input → empty output');
+
+// Test 3: Single debt không thay đổi
+const singleInput = [{ from: 'TV001', fromName: 'A', to: 'TV002', toName: 'B', amount: 50000 }];
+const singleResult = simplifyDebts(singleInput);
+assert(singleResult.length === 1, 'Single debt giữ nguyên');
+assert(singleResult[0].amount === 50000, 'Single debt amount đúng');
+
+// Test 4: Tam giác — tối ưu hóa giảm transaction count
+const triangleInput = [
+  { from: 'TV001', fromName: 'A', to: 'TV002', toName: 'B', amount: 100000 },
+  { from: 'TV003', fromName: 'C', to: 'TV002', toName: 'B', amount: 50000 },
+  { from: 'TV002', fromName: 'B', to: 'TV004', toName: 'D', amount: 80000 },
+];
+const triangleResult = simplifyDebts(triangleInput);
+assert(triangleResult.length <= triangleInput.length, 'Tam giác: kết quả ≤ input count');
+// Kiểm tra net balance của mỗi người được bảo toàn (không kiểm tra total vì algorithm giảm chain)
+const calcNet = (debts) => {
+  const net = {};
+  debts.forEach(d => {
+    net[d.from] = (net[d.from] || 0) - d.amount;
+    net[d.to] = (net[d.to] || 0) + d.amount;
+  });
+  return net;
+};
+const netBefore = calcNet(triangleInput);
+const netAfter = calcNet(triangleResult);
+const allIds = [...new Set([...Object.keys(netBefore), ...Object.keys(netAfter)])];
+const netPreserved = allIds.every(id => Math.abs((netBefore[id] || 0) - (netAfter[id] || 0)) < 2);
+assert(netPreserved, 'Net balance của mỗi người bảo toàn sau tối ưu hóa');
+console.log('\n✓ Tất cả simplifyDebts tests passed!');
