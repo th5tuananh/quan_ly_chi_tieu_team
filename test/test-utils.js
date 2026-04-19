@@ -4,11 +4,35 @@ function assert(condition, msg) {
   console.log('PASS:', msg);
 }
 
-// ===== COPY FUNCTIONS ĐỂ TEST (paste implementation vào đây) =====
+// ===== IMPLEMENTATIONS =====
 function exportToCSV(transactions, members) {
-  throw new Error('Not implemented');
+  const memberMap = {};
+  members.forEach(m => { memberMap[m.id] = m.ten; });
+
+  const BOM = '\uFEFF';
+  const headers = ['Ngày', 'Mô tả', 'Nguồn', 'Người trả', 'Tổng tiền', 'Người chia', 'Số tiền', 'Đã thanh toán'];
+  const escape = (s) => `"${String(s).replace(/"/g, '""')}"`;
+
+  const rows = [headers.join(',')];
+  transactions.forEach(tx => {
+    const date = tx.ngay ? tx.ngay.substring(0, 10) : '';
+    const payerName = memberMap[tx.nguoiTra] || tx.nguoiTra;
+    tx.chiTiet.forEach(ct => {
+      rows.push([
+        date,
+        escape(tx.moTa),
+        tx.nguon,
+        payerName,
+        tx.tongTien,
+        memberMap[ct.thanhVienId] || ct.thanhVienId,
+        ct.soTien,
+        ct.daThanhToan ? 'Đã trả' : 'Chưa trả'
+      ].join(','));
+    });
+  });
+  return BOM + rows.join('\n');
 }
-// =================================================================
+// ==========================
 
 const mockMembers = [
   { id: 'TV001', ten: 'Heo' },

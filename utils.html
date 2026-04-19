@@ -1,4 +1,33 @@
 <script>
+    // --- PURE FUNCTIONS ---
+    const exportToCSV = (transactions, members) => {
+      const memberMap = {};
+      members.forEach(m => { memberMap[m.id] = m.ten; });
+
+      const BOM = '\uFEFF';
+      const headers = ['Ngày', 'Mô tả', 'Nguồn', 'Người trả', 'Tổng tiền', 'Người chia', 'Số tiền', 'Đã thanh toán'];
+      const escape = (s) => `"${String(s).replace(/"/g, '""')}"`;
+
+      const rows = [headers.join(',')];
+      transactions.forEach(tx => {
+        const date = tx.ngay ? tx.ngay.substring(0, 10) : '';
+        const payerName = memberMap[tx.nguoiTra] || tx.nguoiTra;
+        tx.chiTiet.forEach(ct => {
+          rows.push([
+            date,
+            escape(tx.moTa),
+            tx.nguon,
+            payerName,
+            tx.tongTien,
+            memberMap[ct.thanhVienId] || ct.thanhVienId,
+            ct.soTien,
+            ct.daThanhToan ? 'Đã trả' : 'Chưa trả'
+          ].join(','));
+        });
+      });
+      return BOM + rows.join('\n');
+    };
+
     // --- GLOBAL STATE ---
     let members = [];
     let transactions = [];
@@ -92,6 +121,20 @@
            refreshUI();
         }
         hideLoading();
+      });
+
+      // Export CSV
+      document.getElementById('btn-export-csv').addEventListener('click', () => {
+        if (transactions.length === 0) return showToast('Chưa có dữ liệu để xuất', 'error');
+        const csv = exportToCSV(transactions, members);
+        const encodedUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `chi-tieu-team-${new Date().toISOString().substring(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('Đã xuất file CSV');
       });
 
       // Member
