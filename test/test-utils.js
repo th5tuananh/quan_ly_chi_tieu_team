@@ -138,3 +138,63 @@ const allIds = [...new Set([...Object.keys(netBefore), ...Object.keys(netAfter)]
 const netPreserved = allIds.every(id => Math.abs((netBefore[id] || 0) - (netAfter[id] || 0)) < 2);
 assert(netPreserved, 'Net balance của mỗi người bảo toàn sau tối ưu hóa');
 console.log('\n✓ Tất cả simplifyDebts tests passed!');
+
+// ===== TEST: Aggregate Functions =====
+function aggregateByMonth(transactions) {
+  const result = {};
+  transactions.forEach(tx => {
+    if (!tx.ngay) return;
+    const m = new Date(tx.ngay).toISOString().substring(0, 7);
+    result[m] = (result[m] || 0) + (parseFloat(tx.tongTien) || 0);
+  });
+  return result;
+}
+
+function aggregateByMember(transactions, members) {
+  const result = {};
+  members.forEach(m => { result[m.id] = { name: m.ten, totalPaid: 0, totalOwed: 0 }; });
+  transactions.forEach(tx => {
+    if (result[tx.nguoiTra]) result[tx.nguoiTra].totalPaid += parseFloat(tx.tongTien) || 0;
+    tx.chiTiet.forEach(ct => {
+      if (result[ct.thanhVienId]) result[ct.thanhVienId].totalOwed += parseFloat(ct.soTien) || 0;
+    });
+  });
+  return result;
+}
+
+function aggregateBySource(transactions, monthFilter) {
+  const result = {};
+  transactions
+    .filter(tx => !monthFilter || (tx.ngay && tx.ngay.startsWith(monthFilter)))
+    .forEach(tx => {
+      result[tx.nguon] = (result[tx.nguon] || 0) + (parseFloat(tx.tongTien) || 0);
+    });
+  return result;
+}
+
+const txMocks = [
+  { ngay: '2026-03-10T00:00:00Z', tongTien: 300000, nguon: 'Grab', nguoiTra: 'TV001',
+    chiTiet: [{ thanhVienId: 'TV001', soTien: 150000 }, { thanhVienId: 'TV002', soTien: 150000 }] },
+  { ngay: '2026-04-05T00:00:00Z', tongTien: 200000, nguon: 'ShopeeFood', nguoiTra: 'TV002',
+    chiTiet: [{ thanhVienId: 'TV001', soTien: 100000 }, { thanhVienId: 'TV002', soTien: 100000 }] },
+  { ngay: '2026-04-15T00:00:00Z', tongTien: 180000, nguon: 'Grab', nguoiTra: 'TV001',
+    chiTiet: [{ thanhVienId: 'TV001', soTien: 90000 }, { thanhVienId: 'TV002', soTien: 90000 }] },
+];
+const memMocks = [{ id: 'TV001', ten: 'Heo' }, { id: 'TV002', ten: 'Tuấn Anh' }];
+
+const byMonth = aggregateByMonth(txMocks);
+assert(byMonth['2026-03'] === 300000, 'aggregateByMonth: tháng 3 đúng');
+assert(byMonth['2026-04'] === 380000, 'aggregateByMonth: tháng 4 đúng (200k+180k)');
+
+const byMember = aggregateByMember(txMocks, memMocks);
+assert(byMember['TV001'].totalPaid === 480000, 'aggregateByMember: TV001 totalPaid đúng (300k+180k)');
+assert(byMember['TV002'].totalPaid === 200000, 'aggregateByMember: TV002 totalPaid đúng');
+
+const bySource = aggregateBySource(txMocks, null);
+assert(bySource['Grab'] === 480000, 'aggregateBySource: Grab đúng (300k+180k)');
+assert(bySource['ShopeeFood'] === 200000, 'aggregateBySource: ShopeeFood đúng');
+
+const bySourceFiltered = aggregateBySource(txMocks, '2026-04');
+assert(bySourceFiltered['Grab'] === 180000, 'aggregateBySource với filter tháng 4: Grab đúng');
+assert(bySourceFiltered['ShopeeFood'] === 200000, 'aggregateBySource filter: ShopeeFood tháng 4 đúng');
+console.log('\n✓ Tất cả aggregate tests passed!');

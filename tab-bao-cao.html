@@ -1,8 +1,38 @@
 <div id="tab-bao-cao" class="tab-content">
-  <div class="flex items-center justify-center py-20 text-surface-400">
-    <div class="text-center">
-      <svg class="w-12 h-12 mx-auto mb-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-      <p class="text-sm font-medium">Báo cáo đang được xây dựng...</p>
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+    <h2 class="text-lg font-bold text-surface-900">Báo Cáo Chi Tiêu</h2>
+    <select id="analytics-month" class="border border-surface-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-primary-500">
+      <option value="">Tất cả thời gian</option>
+    </select>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 mb-6">
+    <div class="glass-card p-5 rounded-2xl">
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Tháng này</p>
+      <p id="analytics-this-month" class="text-2xl font-bold tabular-nums text-primary-600">0 đ</p>
     </div>
+    <div class="glass-card p-5 rounded-2xl">
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Tháng trước</p>
+      <p id="analytics-last-month" class="text-2xl font-bold tabular-nums text-surface-700">0 đ</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="glass-card p-5 rounded-2xl">
+      <h3 class="text-sm font-bold mb-4 text-surface-700">Chi tiêu theo tháng (6 tháng gần nhất)</h3>
+      <canvas id="chart-monthly"></canvas>
+    </div>
+    <div class="glass-card p-5 rounded-2xl">
+      <h3 class="text-sm font-bold mb-4 text-surface-700">Phân bổ theo nguồn đặt</h3>
+      <canvas id="chart-source"></canvas>
+    </div>
+    <div class="glass-card p-5 rounded-2xl lg:col-span-2">
+      <h3 class="text-sm font-bold mb-4 text-surface-700">Chi tiêu theo thành viên</h3>
+      <canvas id="chart-member"></canvas>
+    </div>
+  </div>
+
+  <div id="analytics-no-chart" class="hidden text-center py-10 text-surface-500">
+    <p class="font-medium">Không thể tải Chart.js. Vui lòng kiểm tra kết nối mạng.</p>
   </div>
 </div>

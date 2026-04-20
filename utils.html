@@ -61,11 +61,128 @@
       return result;
     };
 
+    const aggregateByMonth = (txs) => {
+      const result = {};
+      txs.forEach(tx => {
+        if (!tx.ngay) return;
+        const m = new Date(tx.ngay).toISOString().substring(0, 7);
+        result[m] = (result[m] || 0) + (parseFloat(tx.tongTien) || 0);
+      });
+      return result;
+    };
+
+    const aggregateByMember = (txs, mems) => {
+      const result = {};
+      mems.forEach(m => { result[m.id] = { name: m.ten, totalPaid: 0, totalOwed: 0 }; });
+      txs.forEach(tx => {
+        if (result[tx.nguoiTra]) result[tx.nguoiTra].totalPaid += parseFloat(tx.tongTien) || 0;
+        tx.chiTiet.forEach(ct => {
+          if (result[ct.thanhVienId]) result[ct.thanhVienId].totalOwed += parseFloat(ct.soTien) || 0;
+        });
+      });
+      return result;
+    };
+
+    const aggregateBySource = (txs, monthFilter) => {
+      const result = {};
+      txs
+        .filter(tx => !monthFilter || (tx.ngay && tx.ngay.startsWith(monthFilter)))
+        .forEach(tx => {
+          result[tx.nguon] = (result[tx.nguon] || 0) + (parseFloat(tx.tongTien) || 0);
+        });
+      return result;
+    };
+
     // --- GLOBAL STATE ---
     let members = [];
     let transactions = [];
     let splitMode = 'even'; // 'even' | 'custom'
     let isDebtOptimized = false;
+    let monthlyChart = null, sourceChart = null, memberChart = null;
+
+    const renderAnalytics = () => {
+      if (typeof Chart === 'undefined') {
+        document.getElementById('analytics-no-chart').classList.remove('hidden');
+        return;
+      }
+
+      const monthFilter = document.getElementById('analytics-month').value || null;
+      const byMonth = aggregateByMonth(transactions);
+      const bySource = aggregateBySource(transactions, monthFilter);
+      const byMember = aggregateByMember(transactions, members);
+
+      // Populate month selector (one-time)
+      const sel = document.getElementById('analytics-month');
+      const existingVals = Array.from(sel.options).map(o => o.value);
+      Object.keys(byMonth).sort().reverse().forEach(m => {
+        if (!existingVals.includes(m)) {
+          const [y, mo] = m.split('-');
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = `Tháng ${mo}/${y}`;
+          sel.appendChild(opt);
+        }
+      });
+
+      // Summary cards
+      const now = new Date();
+      const thisM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const lastMDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      const lastM = `${lastMDate.getFullYear()}-${String(lastMDate.getMonth()+1).padStart(2,'0')}`;
+      document.getElementById('analytics-this-month').textContent = formatCurrency(byMonth[thisM] || 0);
+      document.getElementById('analytics-last-month').textContent = formatCurrency(byMonth[lastM] || 0);
+
+      // Bar chart: last 6 months
+      const last6 = Array.from({length: 6}, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      });
+      if (monthlyChart) monthlyChart.destroy();
+      monthlyChart = new Chart(document.getElementById('chart-monthly'), {
+        type: 'bar',
+        data: {
+          labels: last6.map(m => { const [y,mo] = m.split('-'); return `T${mo}/${y.slice(2)}`; }),
+          datasets: [{ label: 'Chi tiêu', data: last6.map(m => byMonth[m] || 0),
+            backgroundColor: '#6366f1', borderRadius: 6 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } },
+          scales: { y: { ticks: { callback: v => new Intl.NumberFormat('vi-VN',{notation:'compact'}).format(v) } } } }
+      });
+
+      // Doughnut: by source
+      const srcLabels = Object.keys(bySource);
+      const srcColors = { 'Grab': '#10b981', 'ShopeeFood': '#f59e0b', 'Bên ngoài': '#6366f1' };
+      if (sourceChart) sourceChart.destroy();
+      sourceChart = new Chart(document.getElementById('chart-source'), {
+        type: 'doughnut',
+        data: {
+          labels: srcLabels,
+          datasets: [{ data: srcLabels.map(s => bySource[s]),
+            backgroundColor: srcLabels.map(s => srcColors[s] || '#94a3b8'), borderWidth: 0 }]
+        },
+        options: { responsive: true, plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${formatCurrency(ctx.raw)}` } }
+        }}
+      });
+
+      // Horizontal bar: by member
+      const memEntries = Object.values(byMember).filter(m => m.totalPaid > 0 || m.totalOwed > 0);
+      if (memberChart) memberChart.destroy();
+      memberChart = new Chart(document.getElementById('chart-member'), {
+        type: 'bar',
+        data: {
+          labels: memEntries.map(m => m.name),
+          datasets: [
+            { label: 'Đứng ra trả', data: memEntries.map(m => m.totalPaid), backgroundColor: '#6366f1', borderRadius: 4 },
+            { label: 'Phần chia', data: memEntries.map(m => m.totalOwed), backgroundColor: '#e2e8f0', borderRadius: 4 }
+          ]
+        },
+        options: { responsive: true, indexAxis: 'y',
+          plugins: { legend: { position: 'bottom' } },
+          scales: { x: { ticks: { callback: v => new Intl.NumberFormat('vi-VN',{notation:'compact'}).format(v) } } } }
+      });
+    };
 
     // --- UTILS ---
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
@@ -157,6 +274,9 @@
         hideLoading();
       });
 
+      // Analytics filter
+      document.getElementById('analytics-month').addEventListener('change', renderAnalytics);
+
       // Optimize debt toggle
       document.getElementById('btn-optimize-debt').addEventListener('click', () => {
         isDebtOptimized = !isDebtOptimized;
@@ -247,6 +367,7 @@
           document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
           document.getElementById(targetId).classList.add('active');
           window.scrollTo({top:0, behavior:'smooth'});
+          if (targetId === 'tab-bao-cao') renderAnalytics();
         });
       });
     };
