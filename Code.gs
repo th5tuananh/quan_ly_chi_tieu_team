@@ -447,13 +447,33 @@ function getSummary() {
         const [a, b] = key.split('->');
         const amountAB = debtMap[key];
         const amountBA = debtMap[`${b}->${a}`] || 0;
-        
+
         if (amountAB > amountBA) {
             const netAmount = amountAB - amountBA;
             if (netAmount > 0) {
                 netDebts[`${a}->${b}`] = netAmount;
             }
         }
+    }
+
+    // Trừ settlements khỏi net debts
+    const ttSheet = ss.getSheetByName('ThanhToan');
+    const settlementMap = {};
+    if (ttSheet) {
+      const ttData = ttSheet.getDataRange().getValues();
+      if (ttData.length > 1) {
+        ttData.slice(1).forEach(row => {
+          const tuId = row[1], denId = row[2], soTien = parseFloat(row[3]) || 0;
+          settlementMap[`${tuId}->${denId}`] = (settlementMap[`${tuId}->${denId}`] || 0) + soTien;
+        });
+      }
+    }
+
+    for (const key in netDebts) {
+        const [a, b] = key.split('->');
+        const settledAB = settlementMap[`${a}->${b}`] || 0;
+        const settledBA = settlementMap[`${b}->${a}`] || 0;
+        netDebts[key] = Math.max(0, netDebts[key] - (settledAB - settledBA));
     }
 
     for (const key in netDebts) {
