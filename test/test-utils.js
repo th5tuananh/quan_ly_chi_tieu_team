@@ -198,3 +198,44 @@ const bySourceFiltered = aggregateBySource(txMocks, '2026-04');
 assert(bySourceFiltered['Grab'] === 180000, 'aggregateBySource với filter tháng 4: Grab đúng');
 assert(bySourceFiltered['ShopeeFood'] === 200000, 'aggregateBySource filter: ShopeeFood tháng 4 đúng');
 console.log('\n✓ Tất cả aggregate tests passed!');
+
+// ===== TEST: validateTransactionData =====
+function validateTransactionData(data) {
+  const errors = [];
+  if (!data.nguoiTra) errors.push('Chưa chọn người trả tiền');
+  if (!data.ngay) errors.push('Chưa chọn ngày');
+  if (!data.moTa || !data.moTa.trim()) errors.push('Chưa điền mô tả');
+  if (!data.tongTien || data.tongTien <= 0) errors.push('Tổng tiền phải lớn hơn 0');
+  if (!data.chiTiet || data.chiTiet.length === 0) errors.push('Chưa chọn người chia bill');
+  if (data.chiTiet && data.tongTien > 0) {
+    const sum = data.chiTiet.reduce((s, ct) => s + (parseFloat(ct.soTien) || 0), 0);
+    if (Math.abs(sum - data.tongTien) > 10)
+      errors.push(`Tổng chia chưa khớp bill`);
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+const validData = {
+  nguoiTra: 'TV001', ngay: '2026-04-18', moTa: 'Cơm trưa', tongTien: 200000,
+  chiTiet: [{ thanhVienId: 'TV001', soTien: 100000 }, { thanhVienId: 'TV002', soTien: 100000 }]
+};
+
+const r1 = validateTransactionData(validData);
+assert(r1.valid === true, 'validate: data hợp lệ → valid=true');
+assert(r1.errors.length === 0, 'validate: data hợp lệ → không có lỗi');
+
+const r2 = validateTransactionData({ ...validData, nguoiTra: '' });
+assert(r2.valid === false, 'validate: thiếu người trả → invalid');
+assert(r2.errors.some(e => e.includes('người trả')), 'validate: error message đề cập người trả');
+
+const r3 = validateTransactionData({ ...validData, tongTien: 0 });
+assert(r3.valid === false, 'validate: tongTien=0 → invalid');
+
+const r4 = validateTransactionData({ ...validData, chiTiet: [] });
+assert(r4.valid === false, 'validate: chiTiet rỗng → invalid');
+
+const r5 = validateTransactionData({ ...validData,
+  chiTiet: [{ thanhVienId: 'TV001', soTien: 50000 }, { thanhVienId: 'TV002', soTien: 50000 }]
+});
+assert(r5.valid === false, 'validate: sum chiTiet ≠ tongTien → invalid');
+console.log('\n✓ Tất cả validateTransactionData tests passed!');
