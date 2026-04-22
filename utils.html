@@ -484,12 +484,25 @@
     };
 
     window.markPairPaid = async (debtorId, creditorId) => {
+      // Lấy số tiền net debt hiện tại từ summary
+      const summary = await runAsync('getSummary');
+      const parsed = typeof summary === 'string' ? JSON.parse(summary) : summary;
+      const pair = parsed.find(s => s.from === debtorId && s.to === creditorId);
+
+      if (!pair) {
+        showToast('Không tìm thấy khoản nợ này. Có thể đã được trả hết.', 'error');
+        return;
+      }
+
+      if (!confirm(`${pair.fromName} đã trả ${pair.toName} ${formatCurrency(pair.amount)} đúng không?`)) return;
+
       showLoading();
       try {
-        await runAsync('markAllPaidForMember', debtorId, creditorId);
+        const res = await runAsync('addSettlement', debtorId, creditorId, pair.amount);
+        if (res.error) throw new Error(res.error);
         transactions = await runAsync('getTransactions');
         refreshUI();
-        showToast('Chốt đơn thành công');
+        showToast(`Đã chốt ${pair.fromName} trả ${pair.toName} ${formatCurrency(pair.amount)} đ`);
       } catch(e) { showToast(e.message, 'error'); }
       finally { hideLoading(); }
     };
