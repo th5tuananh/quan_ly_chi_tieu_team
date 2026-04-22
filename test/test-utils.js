@@ -239,3 +239,110 @@ const r5 = validateTransactionData({ ...validData,
 });
 assert(r5.valid === false, 'validate: sum chiTiet ≠ tongTien → invalid');
 console.log('\n✓ Tất cả validateTransactionData tests passed!');
+
+// ===== TEST: Settlement Logic =====
+const createMockSpreadsheet = (thanhToanRows, chiTietRows, giaoDichRows) => ({
+  getSheetByName: (name) => {
+    if (name === 'ThanhToan') return { getDataRange: () => ({ getValues: () => thanhToanRows }) };
+    if (name === 'ChiTiet') return { getDataRange: () => ({ getValues: () => chiTietRows }) };
+    if (name === 'GiaoDich') return { getDataRange: () => ({ getValues: () => giaoDichRows }) };
+    return null;
+  }
+});
+
+const computeNetDebtFromChiTiet = (ctRows, gdRows) => {
+  const gdMap = {};
+  if (gdRows.length > 1) {
+    gdRows.slice(1).forEach(row => {
+      if (row[6] !== 'deleted') gdMap[row[0]] = { nguoiTra: row[1] };
+    });
+  }
+  const debtMap = {};
+  if (ctRows.length > 1) {
+    ctRows.slice(1).forEach(row => {
+      const gdId = row[1], debtor = row[2], amount = parseFloat(row[3]) || 0, isPaid = row[4];
+      if (gdMap[gdId] && !isPaid) {
+        const creditor = gdMap[gdId].nguoiTra;
+        if (debtor !== creditor && amount > 0) {
+          const key = `${debtor}->${creditor}`;
+          debtMap[key] = (debtMap[key] || 0) + amount;
+        }
+      }
+    });
+  }
+  const netDebts = {};
+  for (const key in debtMap) {
+    const [a, b] = key.split('->');
+    const amountAB = debtMap[key];
+    const amountBA = debtMap[`${b}->${a}`] || 0;
+    if (amountAB > amountBA) netDebts[`${a}->${b}`] = amountAB - amountBA;
+  }
+  return netDebts;
+};
+
+const netDebtAfterSettlement = (netDebts, ttRows) => {
+  const settlementMap = {};
+  if (ttRows.length > 1) {
+    ttRows.slice(1).forEach(row => {
+      const tuId = row[1], denId = row[2], soTien = parseFloat(row[3]) || 0;
+      settlementMap[`${tuId}->${denId}`] = (settlementMap[`${tuId}->${denId}`] || 0) + soTien;
+    });
+  }
+  const result = {};
+  for (const key in netDebts) {
+    const [a, b] = key.split('->');
+    const settledAB = settlementMap[`${a}->${b}`] || 0;
+    const settledBA = settlementMap[`${b}->${a}`] || 0;
+    result[key] = Math.max(0, netDebts[key] - (settledAB - settledBA));
+  }
+  return result;
+};
+
+const mockGdRows = [
+  ['id','nguoiTra','ngay','moTa','tongTien','nguon','trangThai'],
+  ['GD001','TV001','2026-04-10','Ăn trưa','90000','Grab','active'],
+  ['GD002','TV002','2026-04-11','Trà sữa','60000','ShopeeFood','active'],
+];
+const mockCtRows = [
+  ['id','giaoDichId','thanhVienId','soTien','daThanhToan'],
+  ['CT001','GD001','TV001','30000',false],
+  ['CT002','GD001','TV002','30000',false],
+  ['CT003','GD001','TV003','30000',false],
+  ['CT004','GD002','TV001','20000',false],
+  ['CT005','GD002','TV002','20000',false],
+  ['CT006','GD002','TV003','20000',false],
+];
+
+// netDebts from GD001 (A pays 90k, split 3 ways: A,B,C owe 30k each):
+//   TV002->TV001: 30k, TV003->TV001: 30k
+// from GD002 (B pays 60k, split 3 ways: A,B,C owe 20k each):
+//   TV001->TV002: 20k, TV003->TV002: 20k
+// Net: TV002->TV001 = 30k-20k = 10k, TV003->TV001 = 30k, TV003->TV002 = 20k
+const netDebts = computeNetDebtFromChiTiet(mockCtRows, mockGdRows);
+assert(netDebts['TV002->TV001'] === 10000, 'B nợ A 10k (30k-20k)');
+assert(netDebts['TV003->TV001'] === 30000, 'C nợ A 30k');
+assert(netDebts['TV003->TV002'] === 20000, 'C nợ B 20k');
+
+const settled0 = [['id','tuId','denId','soTien','ngay']];
+const after0 = netDebtAfterSettlement(netDebts, settled0);
+assert(after0['TV003->TV001'] === 30000, 'C nợ A 30k (chưa settle)');
+assert(after0['TV003->TV002'] === 20000, 'C nợ B 20k (chưa settle)');
+
+const settled1 = [['id','tuId','denId','soTien','ngay'],['TT001','TV003','TV001',10000,'2026-04-15']];
+const after1 = netDebtAfterSettlement(netDebts, settled1);
+assert(after1['TV003->TV001'] === 20000, 'C nợ A 20k (đã trả 10k)');
+assert(after1['TV003->TV002'] === 20000, 'C nợ B 20k (chưa settle)');
+
+const settled2 = [['id','tuId','denId','soTien','ngay'],['TT001','TV003','TV001',30000,'2026-04-15']];
+const after2 = netDebtAfterSettlement(netDebts, settled2);
+assert(!after2['TV003->TV001'] || after2['TV003->TV001'] === 0, 'C không nợ A nữa');
+
+const settled3 = [['id','tuId','denId','soTien','ngay'],['TT001','TV003','TV001',10000],['TT002','TV001','TV003',5000]];
+const after3 = netDebtAfterSettlement(netDebts, settled3);
+assert(after3['TV003->TV001'] === 25000, 'Settlement 2 chiều tính đúng: C nợ A 25k');
+
+const netDebts2 = computeNetDebtFromChiTiet(mockCtRows, mockGdRows);
+const after4 = netDebtAfterSettlement(netDebts2, settled3);
+assert(after4['TV002->TV001'] === 10000, 'B nợ A 10k (A->B settlement không ảnh hưởng)');
+
+console.log('\n✓ Tất cả settlement tests passed!');
