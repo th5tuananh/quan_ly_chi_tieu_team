@@ -481,8 +481,6 @@ function addSettlement(tuId, denId, soTien) {
 
     // Validate: số tiền settlement không vượt net debt giữa 2 người
     const currentSummary = JSON.parse(getSummary());
-    const pairKey = `${tuId}->${denId}`;
-    const reverseKey = `${denId}->${tuId}`;
 
     // Tính net debt từ summary (tuId nợ denId bao nhiêu)
     let netDebt = 0;
