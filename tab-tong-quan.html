@@ -36,42 +36,50 @@
           </button>
         </div>
 
-        <!-- Filter Bar -->
-        <div id="debt-filter-bar" class="flex flex-wrap gap-3 items-end">
-          <!-- Người nợ -->
-          <div class="flex-1 min-w-[140px]">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Người nợ</label>
-            <select id="filter-debtor" class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-400">
-              <option value="">-- Tất cả --</option>
-            </select>
+        <!-- Filter Bar: 2-row fixed layout -->
+        <div id="debt-filter-bar" class="flex flex-col gap-3">
+          <!-- Row 1: Member dropdowns -->
+          <div class="flex flex-wrap gap-3">
+            <!-- Người nợ -->
+            <div class="flex-1 min-w-[140px]">
+              <label class="block text-xs font-medium text-gray-500 mb-1">Người nợ</label>
+              <select id="filter-debtor" class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-400">
+                <option value="">-- Tất cả --</option>
+              </select>
+            </div>
+            <!-- Người được đòi -->
+            <div class="flex-1 min-w-[140px]">
+              <label class="block text-xs font-medium text-gray-500 mb-1">Chủ nợ</label>
+              <select id="filter-creditor" class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-400">
+                <option value="">-- Tất cả --</option>
+              </select>
+            </div>
           </div>
-          <!-- Người được đòi -->
-          <div class="flex-1 min-w-[140px]">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Chủ nợ</label>
-            <select id="filter-creditor" class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-400">
-              <option value="">-- Tất cả --</option>
-            </select>
+          <!-- Row 2: Amount inputs + spacer + buttons -->
+          <div class="flex flex-wrap gap-3 items-end">
+            <!-- Khoảng tiền: Từ -->
+            <div class="w-[110px]">
+              <label class="block text-xs font-medium text-gray-500 mb-1">Từ (VND)</label>
+              <input id="filter-amount-min" type="number" min="0" step="1000" placeholder="0"
+                     class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-400 tabular-nums">
+            </div>
+            <!-- Khoảng tiền: Đến -->
+            <div class="w-[110px]">
+              <label class="block text-xs font-medium text-gray-500 mb-1">Đến (VND)</label>
+              <input id="filter-amount-max" type="number" min="0" step="1000" placeholder="∞"
+                     class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-400 tabular-nums">
+            </div>
+            <!-- Spacer to push buttons right -->
+            <div class="flex-1"></div>
+            <!-- Nút Tìm -->
+            <button id="btn-apply-filter" class="px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition">
+              Tìm
+            </button>
+            <!-- Nút Reset -->
+            <button id="btn-reset-filter" class="px-3 py-2 bg-surface-100 text-surface-600 text-sm font-medium rounded-lg hover:bg-surface-200 transition">
+              ↺
+            </button>
           </div>
-          <!-- Khoảng tiền: Từ -->
-          <div class="w-32">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Từ (VND)</label>
-            <input id="filter-amount-min" type="number" min="0" step="1000" placeholder="0"
-                   class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-400 tabular-nums">
-          </div>
-          <!-- Khoảng tiền: Đến -->
-          <div class="w-32">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Đến (VND)</label>
-            <input id="filter-amount-max" type="number" min="0" step="1000" placeholder="∞"
-                   class="w-full border border-surface-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-400 tabular-nums">
-          </div>
-          <!-- Nút Tìm -->
-          <button id="btn-apply-filter" class="px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition">
-            Tìm
-          </button>
-          <!-- Nút Reset -->
-          <button id="btn-reset-filter" class="px-3 py-2 bg-surface-100 text-surface-600 text-sm font-medium rounded-lg hover:bg-surface-200 transition">
-            ↺
-          </button>
         </div>
       </div>
       <div id="optimize-badge" class="hidden text-xs text-primary-700 bg-primary-50 border border-primary-100 px-3 py-1.5 rounded-lg font-medium"></div>
