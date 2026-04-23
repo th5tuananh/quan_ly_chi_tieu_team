@@ -1,8 +1,204 @@
 <script>
+    // --- PURE FUNCTIONS ---
+    const exportToCSV = (transactions, members) => {
+      const memberMap = {};
+      members.forEach(m => { memberMap[m.id] = m.ten; });
+
+      const BOM = '\uFEFF';
+      const headers = ['Ngày', 'Mô tả', 'Nguồn', 'Người trả', 'Tổng tiền', 'Người chia', 'Số tiền', 'Đã thanh toán'];
+      const escape = (s) => `"${String(s).replace(/"/g, '""')}"`;
+
+      const rows = [headers.join(',')];
+      transactions.forEach(tx => {
+        const date = tx.ngay ? tx.ngay.substring(0, 10) : '';
+        const payerName = memberMap[tx.nguoiTra] || tx.nguoiTra;
+        tx.chiTiet.forEach(ct => {
+          rows.push([
+            date,
+            escape(tx.moTa),
+            tx.nguon,
+            payerName,
+            tx.tongTien,
+            memberMap[ct.thanhVienId] || ct.thanhVienId,
+            ct.soTien,
+            ct.daThanhToan ? 'Đã trả' : 'Chưa trả'
+          ].join(','));
+        });
+      });
+      return BOM + rows.join('\n');
+    };
+
+    const simplifyDebts = (summaryData) => {
+      if (!summaryData.length) return [];
+
+      const nameMap = {};
+      const balance = {};
+
+      summaryData.forEach(s => {
+        nameMap[s.from] = s.fromName;
+        nameMap[s.to] = s.toName;
+        balance[s.from] = (balance[s.from] || 0) - s.amount;
+        balance[s.to] = (balance[s.to] || 0) + s.amount;
+      });
+
+      const result = [];
+      const b = { ...balance };
+
+      for (let i = 0; i < 1000; i++) {
+        Object.keys(b).forEach(k => { if (Math.abs(b[k]) < 1) delete b[k]; });
+        if (!Object.keys(b).length) break;
+
+        const entries = Object.entries(b);
+        const [maxId, maxAmt] = entries.reduce((a, c) => c[1] > a[1] ? c : a);
+        const [minId, minAmt] = entries.reduce((a, c) => c[1] < a[1] ? c : a);
+        if (maxAmt <= 0 || minAmt >= 0) break;
+
+        const transfer = Math.min(maxAmt, -minAmt);
+        result.push({ from: minId, fromName: nameMap[minId], to: maxId, toName: nameMap[maxId], amount: Math.round(transfer) });
+        b[maxId] -= transfer;
+        b[minId] += transfer;
+      }
+      return result;
+    };
+
+    const aggregateByMonth = (txs) => {
+      const result = {};
+      txs.forEach(tx => {
+        if (!tx.ngay) return;
+        const m = new Date(tx.ngay).toISOString().substring(0, 7);
+        result[m] = (result[m] || 0) + (parseFloat(tx.tongTien) || 0);
+      });
+      return result;
+    };
+
+    const aggregateByMember = (txs, mems) => {
+      const result = {};
+      mems.forEach(m => { result[m.id] = { name: m.ten, totalPaid: 0, totalOwed: 0 }; });
+      txs.forEach(tx => {
+        if (result[tx.nguoiTra]) result[tx.nguoiTra].totalPaid += parseFloat(tx.tongTien) || 0;
+        tx.chiTiet.forEach(ct => {
+          if (result[ct.thanhVienId]) result[ct.thanhVienId].totalOwed += parseFloat(ct.soTien) || 0;
+        });
+      });
+      return result;
+    };
+
+    const aggregateBySource = (txs, monthFilter) => {
+      const result = {};
+      txs
+        .filter(tx => !monthFilter || (tx.ngay && tx.ngay.startsWith(monthFilter)))
+        .forEach(tx => {
+          result[tx.nguon] = (result[tx.nguon] || 0) + (parseFloat(tx.tongTien) || 0);
+        });
+      return result;
+    };
+
+    const validateTransactionData = (data) => {
+      const errors = [];
+      if (!data.nguoiTra) errors.push('Chưa chọn người trả tiền');
+      if (!data.ngay) errors.push('Chưa chọn ngày');
+      if (!data.moTa || !data.moTa.trim()) errors.push('Chưa điền mô tả');
+      if (!data.tongTien || data.tongTien <= 0) errors.push('Tổng tiền phải lớn hơn 0');
+      if (!data.chiTiet || data.chiTiet.length === 0) errors.push('Chưa chọn người chia bill');
+      if (data.chiTiet && data.tongTien > 0) {
+        const sum = data.chiTiet.reduce((s, ct) => s + (parseFloat(ct.soTien) || 0), 0);
+        if (Math.abs(sum - data.tongTien) > 10)
+          errors.push(`Tổng chia (${formatCurrency(sum)}) chưa khớp bill (${formatCurrency(data.tongTien)})`);
+      }
+      return { valid: errors.length === 0, errors };
+    };
+
     // --- GLOBAL STATE ---
     let members = [];
     let transactions = [];
     let splitMode = 'even'; // 'even' | 'custom'
+    let batchSelectedIds = new Set(); // ChiTietId đã tick
+    let isDebtOptimized = false;
+    let monthlyChart = null, sourceChart = null, memberChart = null;
+
+    const renderAnalytics = () => {
+      if (typeof Chart === 'undefined') {
+        document.getElementById('analytics-no-chart').classList.remove('hidden');
+        return;
+      }
+
+      const monthFilter = document.getElementById('analytics-month').value || null;
+      const byMonth = aggregateByMonth(transactions);
+      const bySource = aggregateBySource(transactions, monthFilter);
+      const byMember = aggregateByMember(transactions, members);
+
+      // Populate month selector (one-time)
+      const sel = document.getElementById('analytics-month');
+      const existingVals = Array.from(sel.options).map(o => o.value);
+      Object.keys(byMonth).sort().reverse().forEach(m => {
+        if (!existingVals.includes(m)) {
+          const [y, mo] = m.split('-');
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = `Tháng ${mo}/${y}`;
+          sel.appendChild(opt);
+        }
+      });
+
+      // Summary cards
+      const now = new Date();
+      const thisM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const lastMDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      const lastM = `${lastMDate.getFullYear()}-${String(lastMDate.getMonth()+1).padStart(2,'0')}`;
+      document.getElementById('analytics-this-month').textContent = formatCurrency(byMonth[thisM] || 0);
+      document.getElementById('analytics-last-month').textContent = formatCurrency(byMonth[lastM] || 0);
+
+      // Bar chart: last 6 months
+      const last6 = Array.from({length: 6}, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      });
+      if (monthlyChart) monthlyChart.destroy();
+      monthlyChart = new Chart(document.getElementById('chart-monthly'), {
+        type: 'bar',
+        data: {
+          labels: last6.map(m => { const [y,mo] = m.split('-'); return `T${mo}/${y.slice(2)}`; }),
+          datasets: [{ label: 'Chi tiêu', data: last6.map(m => byMonth[m] || 0),
+            backgroundColor: '#6366f1', borderRadius: 6 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } },
+          scales: { y: { ticks: { callback: v => new Intl.NumberFormat('vi-VN',{notation:'compact'}).format(v) } } } }
+      });
+
+      // Doughnut: by source
+      const srcLabels = Object.keys(bySource);
+      const srcColors = { 'Grab': '#10b981', 'ShopeeFood': '#f59e0b', 'Bên ngoài': '#6366f1' };
+      if (sourceChart) sourceChart.destroy();
+      sourceChart = new Chart(document.getElementById('chart-source'), {
+        type: 'doughnut',
+        data: {
+          labels: srcLabels,
+          datasets: [{ data: srcLabels.map(s => bySource[s]),
+            backgroundColor: srcLabels.map(s => srcColors[s] || '#94a3b8'), borderWidth: 0 }]
+        },
+        options: { responsive: true, plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${formatCurrency(ctx.raw)}` } }
+        }}
+      });
+
+      // Horizontal bar: by member
+      const memEntries = Object.values(byMember).filter(m => m.totalPaid > 0 || m.totalOwed > 0);
+      if (memberChart) memberChart.destroy();
+      memberChart = new Chart(document.getElementById('chart-member'), {
+        type: 'bar',
+        data: {
+          labels: memEntries.map(m => m.name),
+          datasets: [
+            { label: 'Đứng ra trả', data: memEntries.map(m => m.totalPaid), backgroundColor: '#6366f1', borderRadius: 4 },
+            { label: 'Phần chia', data: memEntries.map(m => m.totalOwed), backgroundColor: '#e2e8f0', borderRadius: 4 }
+          ]
+        },
+        options: { responsive: true, indexAxis: 'y',
+          plugins: { legend: { position: 'bottom' } },
+          scales: { x: { ticks: { callback: v => new Intl.NumberFormat('vi-VN',{notation:'compact'}).format(v) } } } }
+      });
+    };
 
     // --- UTILS ---
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
@@ -94,6 +290,40 @@
         hideLoading();
       });
 
+      // Analytics filter
+      document.getElementById('analytics-month').addEventListener('change', renderAnalytics);
+
+      // Optimize debt toggle
+      document.getElementById('btn-optimize-debt').addEventListener('click', () => {
+        isDebtOptimized = !isDebtOptimized;
+        const btn = document.getElementById('btn-optimize-debt');
+        const label = document.getElementById('optimize-label');
+        if (isDebtOptimized) {
+          btn.classList.add('border-primary-400', 'text-primary-600', 'bg-primary-50');
+          btn.classList.remove('bg-white', 'text-surface-600');
+          label.textContent = 'Đang tối ưu';
+        } else {
+          btn.classList.remove('border-primary-400', 'text-primary-600', 'bg-primary-50');
+          btn.classList.add('bg-white', 'text-surface-600');
+          label.textContent = 'Tối ưu hóa';
+        }
+        updateDashboard();
+      });
+
+      // Export CSV
+      document.getElementById('btn-export-csv').addEventListener('click', () => {
+        if (transactions.length === 0) return showToast('Chưa có dữ liệu để xuất', 'error');
+        const csv = exportToCSV(transactions, members);
+        const encodedUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `chi-tieu-team-${new Date().toISOString().substring(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('Đã xuất file CSV');
+      });
+
       // Member
       document.getElementById('btn-add-member').addEventListener('click', async () => {
         const nameInput = document.getElementById('new-member-name');
@@ -116,10 +346,12 @@
     });
 
     const refreshUI = async () => {
+      batchSelectedIds.clear();
       renderMembersTab();
       updatePayerDropdown();
       renderSplitList();
       renderHistory();
+      updateBatchFooter();
       await updateDashboard();
     };
 
@@ -153,6 +385,7 @@
           document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
           document.getElementById(targetId).classList.add('active');
           window.scrollTo({top:0, behavior:'smooth'});
+          if (targetId === 'tab-bao-cao') renderAnalytics();
         });
       });
     };
@@ -175,18 +408,27 @@
         const summary = await runAsync('getSummary'); // [{from, fromName, to, toName, amount}]
         if(summary.error) throw new Error(summary.error);
 
+        const displayData = isDebtOptimized ? simplifyDebts(summary) : summary;
+        const badge = document.getElementById('optimize-badge');
+        if (isDebtOptimized && summary.length > 0) {
+          badge.classList.remove('hidden');
+          badge.textContent = `Tối ưu: ${displayData.length} giao dịch thay vì ${summary.length}`;
+        } else {
+          badge.classList.add('hidden');
+        }
+
         let grandTotal = 0;
         const tbodyDesktop = document.getElementById('debt-summary-desktop');
         const containerMobile = document.getElementById('debt-summary-mobile');
         tbodyDesktop.innerHTML = '';
         containerMobile.innerHTML = '';
 
-        if (summary.length === 0) {
+        if (displayData.length === 0) {
           const emptyHtml = `<tr><td colspan="4" class="px-6 py-8 text-center text-sm font-medium text-surface-500">🎉 Tuyệt vời! Không ai nợ ai.</td></tr>`;
           tbodyDesktop.innerHTML = emptyHtml;
           containerMobile.innerHTML = `<div class="p-6 text-center text-sm font-medium text-surface-500">🎉 Không có khoản nợ nào.</div>`;
         } else {
-          summary.forEach(s => {
+          displayData.forEach(s => {
             grandTotal += s.amount;
             const isHigh = s.amount > 100000;
             const amtClass = isHigh ? 'text-danger-600' : 'text-surface-900';
@@ -245,6 +487,7 @@
     };
 
     window.markPairPaid = async (debtorId, creditorId) => {
+      if (!confirm(`Xác nhận tất cả các khoản nợ giữa 2 người này đã được trả xong?`)) return;
       showLoading();
       try {
         await runAsync('markAllPaidForMember', debtorId, creditorId);
@@ -467,13 +710,21 @@
           if (ct.thanhVienId === t.nguoiTra) return;
           const mObj = members.find(m => m.id === ct.thanhVienId);
           const mName = mObj ? mObj.ten : ct.thanhVienId;
+          const paidTime = ct.paidAt ? (() => {
+            const d = new Date(ct.paidAt);
+            return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')} ${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
+          })() : '';
           const statusHtml = ct.daThanhToan
-            ? `<span class="px-2 py-1 text-[10px] uppercase font-bold rounded bg-success-50 text-success-600 border border-success-200">Đã trả</span>`
+            ? `<div class="flex flex-col items-end"><span class="px-2 py-1 text-[10px] uppercase font-bold rounded bg-success-50 text-success-600 border border-success-200">Đã trả</span>${paidTime ? `<span class="text-[9px] text-surface-400 mt-0.5">${paidTime}</span>` : ''}</div>`
             : `<button onclick="markCtPaid('${ct.id}')" class="px-3 py-1.5 text-xs font-semibold rounded border border-danger-200 bg-danger-50 text-danger-600 hover:bg-danger-100 transition shadow-sm touch-target outline-none">Check trả nợ</button>`;
 
+          const rowCheckbox = !ct.daThanhToan
+            ? `<input type="checkbox" onclick="handleBatchToggle('${ct.id}'); event.stopPropagation();" class="batch-row-cb w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500 cursor-pointer mr-3 flex-shrink-0" ${batchSelectedIds.has(ct.id) ? 'checked' : ''}>`
+            : '';
           detailsHtml += `
-            <div class="flex justify-between items-center py-2.5 border-b last:border-0 border-surface-100">
-              <span class="text-sm font-medium text-surface-800">${mName}</span>
+            <div class="flex items-center py-2.5 border-b last:border-0 border-surface-100">
+              ${rowCheckbox}
+              <span class="text-sm font-medium text-surface-800 flex-1">${mName}</span>
               <div class="flex items-center space-x-4">
                 <span class="font-bold tabular-nums text-surface-900">${formatCurrency(ct.soTien)}</span>
                 ${statusHtml}
@@ -489,6 +740,7 @@
           <div class="p-4 md:p-5 cursor-pointer touch-target h-auto items-start flex-col" onclick="toggleDetails('${t.id}')">
             <div class="flex justify-between items-start mb-2 w-full">
               <div class="flex items-center space-x-2">
+                <input type="checkbox" onclick="handleBatchHeaderToggle('${t.id}'); event.stopPropagation();" class="batch-header-cb w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500 cursor-pointer mr-2 flex-shrink-0">
                 <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeColor(t.nguon)}">${t.nguon}</span>
                 <span class="text-xs font-semibold text-surface-500">${formatDate(t.ngay)}</span>
               </div>
@@ -504,7 +756,11 @@
               <h4 class="text-xs font-bold text-surface-400 uppercase mb-2">Chi Tiết Nợ</h4>
               ${detailsHtml}
             </div>
-            <div class="text-right mt-2 flex justify-end">
+            <div class="text-right mt-2 flex justify-end gap-2">
+              <button onclick="openEditModal('${t.id}')" class="text-xs text-primary-600 bg-white border border-primary-100 hover:bg-primary-50 px-4 py-2 touch-target rounded-lg font-semibold flex items-center transition shadow-sm outline-none">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                Sửa
+              </button>
               <button onclick="deleteTx('${t.id}')" class="text-xs text-danger-600 bg-white border border-danger-100 hover:bg-danger-50 px-4 py-2 touch-target rounded-lg font-semibold flex items-center transition shadow-sm outline-none">
                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                  Xoá Bill
@@ -525,12 +781,84 @@
       event.stopPropagation();
       showLoading();
       try {
-        await runAsync('markAsPaid', ctId);
+        await runAsync('markAsPaidWithLog', ctId, '');
         transactions = await runAsync('getTransactions');
         refreshUI();
         showToast('Nợ đã được xí xóa');
       } catch(e) { showToast(e.message, 'error'); }
       finally { hideLoading(); }
+    };
+
+    /**
+     * Toggle a single ChiTiet row checkbox
+     */
+    window.handleBatchToggle = (ctId) => {
+      if (batchSelectedIds.has(ctId)) {
+        batchSelectedIds.delete(ctId);
+      } else {
+        batchSelectedIds.add(ctId);
+      }
+      updateBatchFooter();
+    };
+
+    /**
+     * Toggle all ChiTiet in a GD (header checkbox)
+     */
+    window.handleBatchHeaderToggle = (gdId) => {
+      const tx = transactions.find(t => t.id === gdId);
+      if (!tx) return;
+      const unpaidCtIds = tx.chiTiet
+        .filter(ct => ct.thanhVienId !== tx.nguoiTra && !ct.daThanhToan)
+        .map(ct => ct.id);
+      const allSelected = unpaidCtIds.every(id => batchSelectedIds.has(id));
+
+      if (allSelected) {
+        unpaidCtIds.forEach(id => batchSelectedIds.delete(id));
+      } else {
+        unpaidCtIds.forEach(id => batchSelectedIds.add(id));
+      }
+      updateBatchFooter();
+    };
+
+    /**
+     * Update footer: count + enable/disable button
+     */
+    window.updateBatchFooter = () => {
+      const footer = document.getElementById('batch-footer');
+      const countSpan = document.getElementById('batch-count');
+      const btn = document.getElementById('batch-confirm-btn');
+      if (!footer) return;
+
+      const count = batchSelectedIds.size;
+      if (count === 0) {
+        footer.classList.add('hidden');
+        btn.disabled = true;
+      } else {
+        footer.classList.remove('hidden');
+        countSpan.textContent = `Đã chọn: ${count} dòng`;
+        btn.disabled = false;
+        btn.textContent = `Xác nhận đã trả (${count})`;
+      }
+    };
+
+    /**
+     * Submit batch settlement — called from footer button
+     */
+    window.submitBatchSettlement = async () => {
+      if (batchSelectedIds.size === 0) return;
+      showLoading();
+      try {
+        const ids = [...batchSelectedIds];
+        await runAsync('markBatchPaid', ids);
+        batchSelectedIds.clear();
+        transactions = await runAsync('getTransactions');
+        refreshUI();
+        showToast(`Đã duyệt trả ${ids.length} dòng`);
+      } catch(e) {
+        showToast('Lỗi: ' + e.message, 'error');
+      } finally {
+        hideLoading();
+      }
     };
 
     window.deleteTx = async (txId) => {
@@ -544,6 +872,107 @@
       } catch(e) { showToast(e.message, 'error'); }
       finally { hideLoading(); }
     };
+
+    // --- EDIT MODAL ---
+    window.openEditModal = (txId) => {
+      const tx = transactions.find(t => t.id === txId);
+      if (!tx) return;
+
+      document.getElementById('edit-tx-id').value = tx.id;
+      document.getElementById('edit-tx-date').value = tx.ngay ? tx.ngay.substring(0, 10) : '';
+      document.getElementById('edit-tx-desc').value = tx.moTa;
+      document.getElementById('edit-tx-total').value = tx.tongTien;
+
+      const payerSel = document.getElementById('edit-tx-payer');
+      payerSel.innerHTML = '<option value="">-- Chọn --</option>';
+      members.forEach(m => {
+        payerSel.innerHTML += `<option value="${m.id}" ${m.id === tx.nguoiTra ? 'selected' : ''}>${m.ten}</option>`;
+      });
+
+      const srcRadio = document.querySelector(`input[name="edit-tx-source"][value="${tx.nguon}"]`);
+      if (srcRadio) srcRadio.checked = true;
+
+      const splitContainer = document.getElementById('edit-split-list');
+      splitContainer.innerHTML = '';
+      members.forEach(m => {
+        const ct = tx.chiTiet.find(c => c.thanhVienId === m.id);
+        const initials = m.ten.substring(0, 2).toUpperCase();
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between p-3 border border-surface-200 rounded-xl bg-white';
+        div.innerHTML = `
+          <div class="flex items-center">
+            <input type="checkbox" id="edit-check-${m.id}" class="edit-split-check w-5 h-5 text-primary-600 rounded mr-3" data-id="${m.id}" ${ct ? 'checked' : ''} onchange="calcEditSplit()">
+            <div class="w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center mr-2">${initials}</div>
+            <span class="font-semibold text-surface-800">${m.ten}</span>
+          </div>
+          <div class="relative">
+            <input type="number" id="edit-input-${m.id}" min="0" value="${ct ? ct.soTien : 0}"
+              class="border border-surface-300 touch-target w-32 text-right rounded-lg pl-2 pr-6 tabular-nums font-medium focus:ring-2 focus:ring-primary-500 outline-none" oninput="calcEditSplit()">
+            <span class="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-surface-500 text-sm">đ</span>
+          </div>`;
+        splitContainer.appendChild(div);
+      });
+
+      const info = document.getElementById('edit-split-info');
+      info.classList.remove('hidden');
+      info.classList.add('flex');
+      calcEditSplit();
+
+      document.getElementById('edit-modal').style.display = 'flex';
+    };
+
+    window.closeEditModal = () => {
+      document.getElementById('edit-modal').style.display = 'none';
+    };
+
+    window.calcEditSplit = () => {
+      const total = parseFloat(document.getElementById('edit-tx-total').value || 0);
+      let sum = 0;
+      document.querySelectorAll('.edit-split-check:checked').forEach(cb => {
+        sum += parseFloat(document.getElementById(`edit-input-${cb.dataset.id}`).value || 0);
+      });
+      document.getElementById('edit-subtotal').textContent = new Intl.NumberFormat('vi-VN').format(sum);
+      const rem = total - sum;
+      document.getElementById('edit-remaining').textContent = new Intl.NumberFormat('vi-VN').format(rem);
+      const wrap = document.getElementById('edit-remaining-wrap');
+      wrap.className = `flex items-center ${rem < -10 ? 'text-danger-600' : Math.abs(rem) <= 10 ? 'text-success-600' : 'text-warning-600'}`;
+    };
+
+    document.getElementById('form-edit-tx').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('edit-tx-id').value;
+      const payer = document.getElementById('edit-tx-payer').value;
+      const date = document.getElementById('edit-tx-date').value;
+      const desc = document.getElementById('edit-tx-desc').value;
+      const total = parseFloat(document.getElementById('edit-tx-total').value);
+      const source = document.querySelector('input[name="edit-tx-source"]:checked')?.value || 'Bên ngoài';
+
+      const chiTiet = [];
+      let sum = 0;
+      document.querySelectorAll('.edit-split-check:checked').forEach(cb => {
+        const mId = cb.dataset.id;
+        const amt = parseFloat(document.getElementById(`edit-input-${mId}`).value || 0);
+        chiTiet.push({ thanhVienId: mId, soTien: amt });
+        sum += amt;
+      });
+
+      const data = { nguoiTra: payer, ngay: date, moTa: desc, tongTien: total, chiTiet };
+      const validation = validateTransactionData(data);
+      if (!validation.valid) {
+        alert('Vui lòng kiểm tra lại:\n' + validation.errors.join('\n'));
+        return;
+      }
+
+      const result = await runAsync('editTransaction', id, JSON.stringify(data));
+      if (result.success) {
+        closeEditModal();
+        await loadData();
+        renderHistory();
+        renderDebtSummary();
+      } else {
+        alert('Lỗi khi lưu: ' + (result.error || 'Không rõ lỗi'));
+      }
+    });
 
     // --- THÀNH VIÊN ---
     const renderMembersTab = () => {

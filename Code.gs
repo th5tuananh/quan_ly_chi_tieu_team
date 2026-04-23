@@ -81,6 +81,11 @@ function initializeSpreadsheet() {
     sheetCT.appendRow(['id', 'giaoDichId', 'thanhVienId', 'soTien', 'daThanhToan']);
   }
 
+  if (!sheetNames.includes('LichSuThanhToan')) {
+    const sheetLS = ss.insertSheet('LichSuThanhToan');
+    sheetLS.appendRow(['id', 'chiTietId', 'ngayThanhToan', 'nguoiXacNhan']);
+  }
+
   return ss;
 }
 
@@ -176,12 +181,19 @@ function removeMember(id) {
 function getTransactions() {
   try {
     const ss = getSpreadsheet();
-    
+
     const gdDb = ss.getSheetByName('GiaoDich').getDataRange().getValues();
     const ctDb = ss.getSheetByName('ChiTiet').getDataRange().getValues();
-    
+    const lsDb = ss.getSheetByName('LichSuThanhToan')
+      ? ss.getSheetByName('LichSuThanhToan').getDataRange().getValues()
+      : [];
+    const paidAtMap = {};
+    if (lsDb.length > 1) {
+      lsDb.slice(1).forEach(row => { paidAtMap[row[1]] = row[2]; });
+    }
+
     if (gdDb.length <= 1) return JSON.stringify([]);
-    
+
     const chiTietByGd = {};
     if (ctDb.length > 1) {
       ctDb.slice(1).forEach(row => {
@@ -191,7 +203,8 @@ function getTransactions() {
           id: row[0],
           thanhVienId: row[2],
           soTien: row[3],
-          daThanhToan: row[4]
+          daThanhToan: row[4],
+          paidAt: paidAtMap[row[0]] || null
         });
       });
     }
@@ -303,7 +316,7 @@ function markAsPaid(chiTietId) {
     const ss = getSpreadsheet();
     const ctSheet = ss.getSheetByName('ChiTiet');
     const data = ctSheet.getDataRange().getValues();
-    
+
     for (let i = 1; i < data.length; i++) {
         if (data[i][0] === chiTietId) {
             ctSheet.getRange(i + 1, 5).setValue(true);
@@ -313,6 +326,87 @@ function markAsPaid(chiTietId) {
     return JSON.stringify({success: true});
   } catch (e) {
     return JSON.stringify({error: e.toString()});
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function markAsPaidWithLog(chiTietId, confirmedBy) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = getSpreadsheet();
+
+    // Mark ChiTiet row as paid
+    const ctSheet = ss.getSheetByName('ChiTiet');
+    const ctData = ctSheet.getDataRange().getValues();
+    for (let i = 1; i < ctData.length; i++) {
+      if (ctData[i][0] === chiTietId) { ctSheet.getRange(i+1, 5).setValue(true); break; }
+    }
+
+    // Append audit log
+    const lsSheet = ss.getSheetByName('LichSuThanhToan');
+    const lsData = lsSheet.getDataRange().getValues();
+    let nextNum = 1;
+    if (lsData.length > 1) {
+      const m = lsData[lsData.length-1][0].match(/LT(\d+)/);
+      if (m) nextNum = parseInt(m[1]) + 1;
+    }
+    lsSheet.appendRow([`LT${String(nextNum).padStart(4,'0')}`, chiTietId, new Date().toISOString(), confirmedBy || '']);
+
+    return JSON.stringify({ success: true });
+  } catch(e) {
+    return JSON.stringify({ error: e.toString() });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Marks multiple ChiTiet as paid + writes audit log for each
+ * @param {string[]} chiTietIds - array of ChiTietId strings
+ * @returns {string} JSON { success: true, count: X }
+ */
+function markBatchPaid(chiTietIds) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = getSpreadsheet();
+    const ctSheet = ss.getSheetByName('ChiTiet');
+    const ctData = ctSheet.getDataRange().getValues();
+    const lsSheet = ss.getSheetByName('LichSuThanhToan');
+    const lsData = lsSheet.getDataRange().getValues();
+
+    // Find next LT ID
+    let nextNum = 1;
+    if (lsData.length > 1) {
+      const m = lsData[lsData.length - 1][0].match(/LT(\d+)/);
+      if (m) nextNum = parseInt(m[1]) + 1;
+    }
+
+    // Build set for fast lookup
+    const idSet = new Set(chiTietIds);
+    const now = new Date().toISOString();
+    let count = 0;
+
+    // Iterate ChiTiet rows: col[0]=id, col[4]=daThanhToan
+    for (let i = 1; i < ctData.length; i++) {
+      if (idSet.has(ctData[i][0])) {
+        ctSheet.getRange(i + 1, 5).setValue(true);
+        lsSheet.appendRow([
+          `LT${String(nextNum).padStart(4, '0')}`,
+          ctData[i][0], // chiTietId
+          now,
+          '' // confirmedBy empty
+        ]);
+        nextNum++;
+        count++;
+      }
+    }
+
+    return JSON.stringify({ success: true, count });
+  } catch(e) {
+    return JSON.stringify({ error: e.toString() });
   } finally {
     lock.releaseLock();
   }
@@ -398,7 +492,7 @@ function getSummary() {
         const [a, b] = key.split('->');
         const amountAB = debtMap[key];
         const amountBA = debtMap[`${b}->${a}`] || 0;
-        
+
         if (amountAB > amountBA) {
             const netAmount = amountAB - amountBA;
             if (netAmount > 0) {
@@ -421,5 +515,52 @@ function getSummary() {
     return JSON.stringify(summaryData);
   } catch (e) {
     return JSON.stringify({error: e.toString()});
+  }
+}
+
+function editTransaction(id, newDataStr) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const data = typeof newDataStr === 'string' ? JSON.parse(newDataStr) : newDataStr;
+    const ss = getSpreadsheet();
+    const gdSheet = ss.getSheetByName('GiaoDich');
+    const ctSheet = ss.getSheetByName('ChiTiet');
+
+    // Update GiaoDich row
+    const gdData = gdSheet.getDataRange().getValues();
+    let gdRowIdx = -1;
+    for (let i = 1; i < gdData.length; i++) {
+      if (gdData[i][0] === id) { gdRowIdx = i + 1; break; }
+    }
+    if (gdRowIdx === -1) throw new Error('Không tìm thấy giao dịch ' + id);
+    gdSheet.getRange(gdRowIdx, 2, 1, 5).setValues([[
+      data.nguoiTra, data.ngay, data.moTa, data.tongTien, data.nguon
+    ]]);
+
+    // Xóa ChiTiet cũ (từ dưới lên để index không lệch)
+    const ctData = ctSheet.getDataRange().getValues();
+    for (let i = ctData.length - 1; i >= 1; i--) {
+      if (ctData[i][1] === id) ctSheet.deleteRow(i + 1);
+    }
+
+    // Insert ChiTiet mới
+    const freshCt = ctSheet.getDataRange().getValues();
+    let nextNum = 1;
+    if (freshCt.length > 1) {
+      const m = freshCt[freshCt.length - 1][0].match(/CT(\d+)/);
+      if (m) nextNum = parseInt(m[1]) + 1;
+    }
+    const rows = data.chiTiet.map(ct => {
+      const isPaid = ct.thanhVienId === data.nguoiTra;
+      return [`CT${String(nextNum++).padStart(4,'0')}`, id, ct.thanhVienId, ct.soTien, isPaid];
+    });
+    if (rows.length) ctSheet.getRange(ctSheet.getLastRow()+1, 1, rows.length, 5).setValues(rows);
+
+    return JSON.stringify({ success: true });
+  } catch (e) {
+    return JSON.stringify({ error: e.toString() });
+  } finally {
+    lock.releaseLock();
   }
 }

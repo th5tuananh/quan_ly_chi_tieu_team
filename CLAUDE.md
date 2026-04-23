@@ -1,21 +1,233 @@
 # Quản Lý Chi Tiêu Team (Google Apps Script)
 
 ## 📌 Kiến trúc dự án
-Dự án này là một web app chạy trên nền tảng Google Apps Script (GAS), đóng vai trò như một hệ thống quản lý chi tiêu nội bộ/nhóm tiện lợi, không cần server hay database phức tạp.
-- **Code.gs**: Backend API của dự án. Chứa logic xử lý nội bộ, thao tác đọc/ghi với Google Sheets, tính toán công nợ và trả về JSON cho frontend. Khởi chạy app thông qua `doGet()`.
-- **index.html**: Frontend Single-Page Application (SPA). Toàn bộ giao diện được gom trong một file duy nhất bao gồm cả HTML, CSS styling (Tailwind CSS thông qua CDN), và logic Vanilla Javascript.
-- **Database**: Sử dụng Google Sheets đóng vai trò thay thế hệ quản trị CSDL. Dữ liệu bao gồm:
-  - `ThanhVien`: Cấu trúc (`id`, `ten`, `ngayThem`)
-  - `GiaoDich`: Cấu trúc (`id`, `nguoiTra`, `ngay`, `moTa`, `tongTien`, `nguon`, `trangThai`)
-  - `ChiTiet`: Lưu chi tiết giao dịch ai nợ bao nhiêu trong mỗi lần chi (`id`, `giaoDichId`, `thanhVienId`, `soTien`, `daThanhToan`)
+Dự án là một web app chạy trên Google Apps Script (GAS), thay thế hệ thống quản lý chi tiêu nội bộ/nhóm không cần server hay database phức tạp.
 
-## 🚀 Tư duy công nghệ (Tech Stack)
-- **Backend & Host**: Trực tiếp trên nền nền Google Apps Script Runtime (Javascript V8).
-- **Frontend**: HTML5 truyền thống, Vanilla ECMAScript, TailwindCSS (tiếp cận utility-first).
-- **Giao tiếp Dữ liệu**: Không dùng REST API `.fetch()` mà dùng hàm native của Google là `google.script.run` kết hợp với Promise pattern (`runAsync()` wrapper được định nghĩa sẵn bên trong `index.html`).
+### Sơ đồ kiến trúc
 
-## ✍️ Hướng dẫn code & Conventions (Dành cho AI Agent)
-- **Keep it Single File**: Bám sát việc không chia rẽ cấu trúc UI thành nhiều components hay framework. Mọi thứ phải gói gọn ở `Code.gs` và `index.html`.
-- **Async/Await**: Sử dụng modern JS, promise wrapper để bắt lỗi mượt mà.
-- **UI/UX Tiếng Việt**: Văn phong, label, tooltip 100% sử dụng Tiếng Việt có dấu, rành mạch và dễ hiểu. Sử dụng format tiện tệ với `Intl.NumberFormat('vi-VN')`.
-- **Atomic Operations trên GAS**: Mọi thao tác làm thay đổi dữ liệu Database (Sheet) phải nằm giữa vòng block của `[LockService.getScriptLock()]` để tránh lỗi Race Condition khi nhiều người dùng cùng request tạo đơn hoặc thanh toán.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Browser (SPA)                          │
+│  index.html + Partial HTMLs + Vanilla JS (utils.html)          │
+│  ├── Tailwind CSS (CDN)                                        │
+│  ├── Chart.js 4.x (CDN)                                        │
+│  └── google.script.run (GAS RPC)                              │
+└────────────────────┬──────────────────────────────────────────┘
+                     │ HTTP (google.script.run)
+                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│               Google Apps Script Runtime                       │
+│  Code.gs                                                         │
+│  ├── doGet() → HtmlService                                     │
+│  ├── include() → HtmlService                                   │
+│  ├── initializeSpreadsheet() → SpreadsheetApp                  │
+│  └── [GAS functions] → LockService + Sheets API                │
+└────────────────────┬──────────────────────────────────────────┘
+                     │ Sheets API
+                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Google Sheets (Database)                     │
+│  ├── ThanhVien   (thành viên)                                  │
+│  ├── GiaoDich    (giao dịch chính)                             │
+│  ├── ChiTiet     (ai nợ bao nhiêu trong mỗi giao dịch)          │
+│  └── LichSuThanhToan (audit log thanh toán)                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Sơ đồ luồng dữ liệu (Data Flow)
+
+```
+User Action          Frontend (utils.html)          Backend (Code.gs)           Sheets
+─────────────────────────────────────────────────────────────────────────────────────
+Tạo đơn
+  submit form   →   runAsync('addTransaction')  →  addTransaction()        →  GiaoDich + ChiTiet
+                      ↓                                    ↓
+                 refreshUI()                              return {success}
+                 (loadData + render*)
+
+Xem tổng quan
+  tab switch    →   runAsync('getTransactions')  →  getTransactions()       →  ChiTiet
+                  runAsync('getSummary')       →  getSummary()            →  ChiTiet + GiaoDich
+                  runAsync('getMembers')        →  getMembers()            →  ThanhVien
+
+Check trả nợ
+  bấm button    →   runAsync('markAsPaidWithLog')  →  markAsPaidWithLog() →  ChiTiet (daThanhToan=true)
+                                                                      LichSuThanhToan (audit log)
+Xác nhận "đã trả hết"
+  bấm button    →   runAsync('markAllPaidForMember')  → markAllPaidForMember() → ChiTiet
+                      ↓                                    ↓
+                 refreshUI()                              return {success}
+```
+
+### File Structure
+
+```
+├── Code.gs              # Backend API (GAS)
+├── index.html           # Shell SPA — <head>, header, nav, include()
+├── utils.html           # Toàn bộ JavaScript (state, render, utils, handlers)
+├── edit-modal.html      # Partial: modal chỉnh sửa giao dịch (F3)
+├── tab-tong-quan.html   # Partial: tab Tổng Quan + debt toggle (F1)
+├── tab-tao-don.html     # Partial: tab Tạo Đơn
+├── tab-lich-su.html     # Partial: tab Lịch Sử + CSV export (F5b)
+├── tab-bao-cao.html     # Partial: tab Báo Cáo analytics (F2)
+├── tab-thanh-vien.html  # Partial: tab Thành Viên
+├── test/
+│   └── test-utils.js    # Pure Node.js tests
+└── docs/superpowers/
+    ├── plans/
+    │   ├── 2026-04-18-5-features-implementation.md
+    │   └── 2026-04-22-debt-settlement-design.md
+    └── specs/
+```
+
+### Database Schema (Google Sheets)
+
+| Sheet | Columns | Mô tả |
+|-------|---------|--------|
+| `ThanhVien` | `id`, `ten`, `ngayThem` | Danh sách thành viên |
+| `GiaoDich` | `id`, `nguoiTra`, `ngay`, `moTa`, `tongTien`, `nguon`, `trangThai` | Giao dịch chính |
+| `ChiTiet` | `id`, `giaoDichId`, `thanhVienId`, `soTien`, `daThanhToan` | Ai nợ bao nhiêu trong mỗi GD |
+| `LichSuThanhToan` | `id`, `chiTietId`, `ngayThanhToan`, `nguoiXacNhan` | Audit log khi check trả nợ |
+
+### Frontend Partial Architecture
+`index.html` dùng `<?!= include('filename') ?>` để inject các partial HTML. Mỗi tab là một file riêng. JavaScript gom hết trong `utils.html`.
+
+### ID Conventions
+- Thành viên: `TV001`, `TV002`, ...
+- Giao dịch: `GD001`, `GD002`, ...
+- Chi tiết: `CT0001`, `CT0002`, ...
+- Log thanh toán: `LT0001`, `LT0002`, ...
+
+## 🚀 Tech Stack
+- **Backend & Host**: Google Apps Script Runtime (JavaScript V8)
+- **Frontend**: HTML5, Vanilla ES6, Tailwind CSS (CDN), Chart.js 4.x (CDN)
+- **Data Communication**: `google.script.run` với Promise wrapper (`runAsync()`)
+- **Testing**: Pure Node.js — không phụ thuộc GAS runtime
+
+## ✅ Tính năng đã triển khai
+
+### F1 — Tối ưu hóa nợ (Minimize Cash Flow)
+- Thuật toán greedy gộp chuỗi nợ: A→B→C collapse thành A→C (net balance)
+- Toggle button trên tab Tổng Quan: "Tối ưu hóa" ↔ "Đang tối ưu"
+- Badge hiển thị số giao dịch sau tối ưu so với ban đầu
+- **Chỉ thay đổi UI** — dữ liệu `ChiTiet` gốc không đổi
+- **Cách hoạt động:** `simplifyDebts(summaryData)` đọc net debts → balance each person → greedy match debtor/creditor → collapse chains
+- **Xác nhận:** `markAllPaidForMember(debtorId, creditorId)` mark các ChiTiet gốc mà debtor nợ creditor trong các GD active là đã trả
+
+### F2 — Analytics Dashboard (Chart.js)
+- Bar chart: chi tiêu 6 tháng gần nhất
+- Doughnut chart: phân bổ theo nguồn đặt (Grab / ShopeeFood / Bên ngoài)
+- Horizontal bar chart: chi tiêu theo thành viên (đứng ra trả vs phần chia)
+- Filter theo tháng, so sánh tháng này vs tháng trước
+- Hàm: `aggregateByMonth()`, `aggregateByMember()`, `aggregateBySource()`, `renderAnalytics()`
+
+### F3 — Chỉnh sửa giao dịch (Edit Transaction)
+- Modal `edit-modal.html` với form đầy đủ: payer, date, description, source, split
+- `openEditModal(txId)` pre-populate form từ transaction data
+- Client-side validation: `validateTransactionData()` kiểm tra tổng chia khớp bill
+- Backend atomic: `editTransaction()` trong Code.gs dùng LockService, xóa ChiTiet cũ → insert mới
+- Submit handler trong `form-edit-tx` event listener
+
+### F5a — Audit log lịch sử thanh toán
+- Sheet `LichSuThanhToan` ghi lại: ai thanh toán, lúc nào, xác nhận bởi ai
+- `markAsPaidWithLog()` thay thế `markAsPaid()` — atomic với LockService
+- `getTransactions()` join `paidAt` timestamp từ audit log
+- Render timestamp dưới badge "Đã trả" trong `renderHistory()`
+
+### F5b — Xuất CSV lịch sử giao dịch
+- BOM UTF-8 để Excel hiển thị tiếng Việt đúng
+- Columns: Ngày, Mô tả, Nguồn, Người trả, Tổng tiền, Người chia, Số tiền, Đã thanh toán
+- Hàm: `exportToCSV(transactions, members)`
+- Nút "Xuất CSV" trong filter bar tab Lịch Sử
+
+## 🔧 Testing
+```bash
+node test/test-utils.js
+```
+Test coverage: CSV export (8), simplifyDebts (7), aggregate functions (8), validateTransactionData (7), settlement logic (10) = **40 tests**
+
+## 🤖 Behavioral Guidelines (Dành cho AI Agent)
+
+Nguyên tắc giảm LLM coding mistakes phổ biến. Áp dụng **cùng** các conventions ở trên.
+
+**Tradeoff:** Các nguyên tắc này nghiêng về **cẩn thận** hơn **tốc độ**. Với trivial tasks, dùng judgment.
+
+### 1. Think Before Coding
+
+**Không assume. Không hide confusion. Surface tradeoffs.**
+
+Trước khi implement:
+- Nêu assumptions rõ ràng. Nếu không chắc, hỏi.
+- Nếu có nhiều cách interpret, present cả — đừng pick im lặng.
+- Nếu có approach đơn giản hơn, nói ra. Push back khi có lý do.
+- Nếu something unclear, dừng. Nêu rõ cái gì đang confuse. Hỏi.
+
+### 2. Simplicity First
+
+**Code tối thiểu solve problem. Không speculative.**
+
+- Không features ngoài scope request.
+- Không abstractions cho single-use code.
+- Không "flexibility" không được ask.
+- Không error handling cho impossible scenarios.
+- Nếu viết 200 lines mà có thể 50, viết lại.
+
+Hỏi: *"Would a senior engineer nói đây là overcomplicated?"* Nếu có, simplify.
+
+### 3. Surgical Changes
+
+**Touch chỉ what you must. Clean up chỉ your own mess.**
+
+Khi edit existing code:
+- Đừng "improve" adjacent code, comments, hoặc formatting.
+- Đừng refactor things aren't broken.
+- Match existing style, even if you'd do differently.
+- Nếu notice unrelated dead code, mention it — đừng delete it.
+
+When changes create orphans:
+- Remove imports/variables/functions mà YOUR changes làm unused.
+- Đừng remove pre-existing dead code unless asked.
+
+**Test:** Every changed line nên trace trực tiếp đến user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks thành verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+Với multi-step tasks, state brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+**These guidelines working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, và clarifying questions come **before** implementation rather than after mistakes.
+
+## ✍️ Conventions (Dành cho AI Agent)
+
+### Backend (Code.gs)
+- **Mọi function đều trả về JSON string** — dùng `JSON.stringify()` hoặc `JSON.stringify({error: ...})`
+- **Atomic Operations**: Mọi thao tác ghi Sheet phải dùng `LockService.getScriptLock()` với `waitLock(10000)` và `releaseLock()` trong `finally`
+- **ID Generation**: Parse ID cuối cùng bằng regex, tăng số, pad zero (e.g., `TV001`, `GD001`)
+- **initializeSpreadsheet()** hỗ trợ 3 modes:
+  1. `MY_SPREADSHEET_ID` được điền → dùng ID cứng
+  2. Container-bound (gắn với Sheet) → dùng `SpreadsheetApp.getActiveSpreadsheet()`
+  3. Standalone → tạo Spreadsheet mới và lưu ID vào ScriptProperties
+
+### Frontend (utils.html)
+- **runAsync(fnName, ...args)**: Promise wrapper cho `google.script.run`
+- **`refreshUI()`**: Load lại data + gọi tất cả render functions
+- **`updateDashboard()`**: Chỉ load summary + member → render debt summary
+- **Format tiền**: `Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })`
+- **Partial Files**: index.html là shell, dùng `include()` cho các tab/modal
+- **Không chia components**: Tất cả UI logic trong một hàm render lớn
+
+### Naming Conventions
+- Sheet columns: snake_case (e.g., `nguoiTra`, `daThanhToan`)
+- JS variables/functions: camelCase (e.g., `chiTiet`, `markPairPaid`)
+- IDs: UPPER_SNAKE_CASE with number padding (e.g., `TV001`, `CT0001`)
