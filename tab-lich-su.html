@@ -34,3 +34,15 @@
     <!-- TX Cards render here -->
   </div>
 </div>
+
+<!-- Batch Settlement Footer -->
+<div id="batch-footer" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg hidden z-50">
+  <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+    <span id="batch-count" class="text-sm font-medium text-gray-700">Đã chọn: 0 dòng</span>
+    <button id="batch-confirm-btn" disabled
+            onclick="submitBatchSettlement()"
+            class="bg-green-500 hover:bg-green-600 text-white font-semibold px-5 py-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+      Xác nhận đã trả (0)
+    </button>
+  </div>
+</div>
