@@ -112,6 +112,7 @@
     let members = [];
     let transactions = [];
     let splitMode = 'even'; // 'even' | 'custom'
+    let batchSelectedIds = new Set(); // ChiTietId đã tick
     let isDebtOptimized = false;
     let monthlyChart = null, sourceChart = null, memberChart = null;
 
@@ -779,6 +780,77 @@
         showToast('Nợ đã được xí xóa');
       } catch(e) { showToast(e.message, 'error'); }
       finally { hideLoading(); }
+    };
+
+    /**
+     * Toggle a single ChiTiet row checkbox
+     */
+    window.handleBatchToggle = (ctId) => {
+      if (batchSelectedIds.has(ctId)) {
+        batchSelectedIds.delete(ctId);
+      } else {
+        batchSelectedIds.add(ctId);
+      }
+      updateBatchFooter();
+    };
+
+    /**
+     * Toggle all ChiTiet in a GD (header checkbox)
+     */
+    window.handleBatchHeaderToggle = (gdId) => {
+      const tx = transactions.find(t => t.id === gdId);
+      if (!tx) return;
+      const unpaidCtIds = tx.chiTiet
+        .filter(ct => ct.thanhVienId !== tx.nguoiTra && !ct.daThanhToan)
+        .map(ct => ct.id);
+      const allSelected = unpaidCtIds.every(id => batchSelectedIds.has(id));
+
+      if (allSelected) {
+        unpaidCtIds.forEach(id => batchSelectedIds.delete(id));
+      } else {
+        unpaidCtIds.forEach(id => batchSelectedIds.add(id));
+      }
+      updateBatchFooter();
+    };
+
+    /**
+     * Update footer: count + enable/disable button
+     */
+    window.updateBatchFooter = () => {
+      const footer = document.getElementById('batch-footer');
+      const countSpan = document.getElementById('batch-count');
+      const btn = document.getElementById('batch-confirm-btn');
+      if (!footer) return;
+
+      const count = batchSelectedIds.size;
+      if (count === 0) {
+        footer.classList.add('hidden');
+      } else {
+        footer.classList.remove('hidden');
+        countSpan.textContent = `Đã chọn: ${count} dòng`;
+        btn.disabled = false;
+        btn.textContent = `Xác nhận đã trả (${count})`;
+      }
+    };
+
+    /**
+     * Submit batch settlement — called from footer button
+     */
+    window.submitBatchSettlement = async () => {
+      if (batchSelectedIds.size === 0) return;
+      showLoading();
+      try {
+        const ids = [...batchSelectedIds];
+        await runAsync('markBatchPaid', ids);
+        batchSelectedIds.clear();
+        transactions = await runAsync('getTransactions');
+        refreshUI();
+        showToast(`Đã duyệt trả ${ids.length} dòng`);
+      } catch(e) {
+        showToast('Lỗi: ' + e.message, 'error');
+      } finally {
+        hideLoading();
+      }
     };
 
     window.deleteTx = async (txId) => {
