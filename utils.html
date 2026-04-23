@@ -61,6 +61,90 @@
       return result;
     };
 
+    // --- FILTER DROPDOWNS ---
+    const populateFilterDropdowns = (members) => {
+      const debtorSelect = document.getElementById('filter-debtor');
+      const creditorSelect = document.getElementById('filter-creditor');
+      if (!debtorSelect || !creditorSelect) return;
+
+      const allOption = '<option value="">-- Tất cả --</option>';
+      const opts = members.map(m => `<option value="${m.id}">${m.ten}</option>`).join('');
+
+      debtorSelect.innerHTML = allOption + opts;
+      creditorSelect.innerHTML = allOption + opts;
+    };
+
+    const applyFilter = (summaryData) => {
+      const debtorId = document.getElementById('filter-debtor')?.value || '';
+      const creditorId = document.getElementById('filter-creditor')?.value || '';
+      const minAmt = parseFloat(document.getElementById('filter-amount-min')?.value) || 0;
+      const maxAmt = parseFloat(document.getElementById('filter-amount-max')?.value) || Infinity;
+
+      const filtered = summaryData.filter(s => {
+        const matchDebtor = !debtorId || s.from === debtorId;
+        const matchCreditor = !creditorId || s.to === creditorId;
+        const matchAmount = s.amount >= minAmt && s.amount <= maxAmt;
+        return matchDebtor && matchCreditor && matchAmount;
+      });
+
+      const displayData = isDebtOptimized ? simplifyDebts(filtered) : filtered;
+      renderDebtSummary(displayData, isDebtOptimized);
+
+      const emptyMsg = document.getElementById('debt-filter-empty');
+      if (emptyMsg) emptyMsg.classList.toggle('hidden', filtered.length > 0);
+    };
+
+    window.renderDebtSummary = (displayData, isOptimized) => {
+      const tbodyDesktop = document.getElementById('debt-summary-desktop');
+      const containerMobile = document.getElementById('debt-summary-mobile');
+      tbodyDesktop.innerHTML = '';
+      containerMobile.innerHTML = '';
+
+      if (displayData.length === 0) {
+        const emptyHtml = `<tr><td colspan="4" class="px-6 py-8 text-center text-sm font-medium text-surface-500">🎉 Tuyệt vời! Không ai nợ ai.</td></tr>`;
+        tbodyDesktop.innerHTML = emptyHtml;
+        containerMobile.innerHTML = `<div class="p-6 text-center text-sm font-medium text-surface-500">🎉 Không có khoản nợ nào.</div>`;
+        document.getElementById('overview-total-debt').innerText = formatCurrency(0);
+        return;
+      }
+
+      let grandTotal = 0;
+      displayData.forEach(s => {
+        grandTotal += s.amount;
+        const isHigh = s.amount > 100000;
+        const amtClass = isHigh ? 'text-danger-600' : 'text-surface-900';
+
+        const fromInit = s.fromName.substring(0, 2).toUpperCase();
+
+        tbodyDesktop.innerHTML += `
+          <tr class="hover:bg-surface-50 transition">
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-surface-900 flex items-center"><div class="w-6 h-6 rounded-full bg-danger-100 text-danger-700 font-bold text-[10px] flex items-center justify-center mr-2">${fromInit}</div>${s.fromName}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-surface-600">Trả <span class="font-bold text-surface-900">${s.toName}</span></td>
+            <td class="px-6 py-4 whitespace-nowrap text-right font-bold tabular-nums text-base ${amtClass}">${formatCurrency(s.amount)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+              <button class="text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 px-3 py-1.5 rounded-lg transition active:scale-95 border-0" onclick="markPairPaid('${s.from}', '${s.to}')">Xác nhận xong ✓</button>
+            </td>
+          </tr>
+        `;
+        containerMobile.innerHTML += `
+          <div class="p-4 flex flex-col space-y-3">
+            <div class="flex justify-between items-center">
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-surface-900">${s.fromName}</span>
+                <svg class="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                <span class="font-medium text-surface-600">${s.toName}</span>
+              </div>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="font-bold tabular-nums text-lg ${amtClass}">${formatCurrency(s.amount)}</span>
+              <button class="text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 px-4 py-2 touch-target rounded-lg transition border-0" onclick="markPairPaid('${s.from}', '${s.to}')">Xác nhận ✓</button>
+            </div>
+          </div>
+        `;
+      });
+      document.getElementById('overview-total-debt').innerText = formatCurrency(grandTotal);
+    };
+
     const aggregateByMonth = (txs) => {
       const result = {};
       txs.forEach(tx => {
@@ -293,6 +377,23 @@
       // Analytics filter
       document.getElementById('analytics-month').addEventListener('change', renderAnalytics);
 
+      // Debt filter event listeners
+      document.getElementById('btn-apply-filter')?.addEventListener('click', () => {
+        applyFilter(window._summaryData || []);
+      });
+
+      document.getElementById('btn-reset-filter')?.addEventListener('click', () => {
+        const debtorSelect = document.getElementById('filter-debtor');
+        const creditorSelect = document.getElementById('filter-creditor');
+        const minInput = document.getElementById('filter-amount-min');
+        const maxInput = document.getElementById('filter-amount-max');
+        if (debtorSelect) debtorSelect.value = '';
+        if (creditorSelect) creditorSelect.value = '';
+        if (minInput) minInput.value = '';
+        if (maxInput) maxInput.value = '';
+        applyFilter(window._summaryData || []);
+      });
+
       // Optimize debt toggle
       document.getElementById('btn-optimize-debt').addEventListener('click', () => {
         isDebtOptimized = !isDebtOptimized;
@@ -408,6 +509,9 @@
         const summary = await runAsync('getSummary'); // [{from, fromName, to, toName, amount}]
         if(summary.error) throw new Error(summary.error);
 
+        // Store raw summary for filter use
+        window._summaryData = summary;
+
         const displayData = isDebtOptimized ? simplifyDebts(summary) : summary;
         const badge = document.getElementById('optimize-badge');
         if (isDebtOptimized && summary.length > 0) {
@@ -417,56 +521,7 @@
           badge.classList.add('hidden');
         }
 
-        let grandTotal = 0;
-        const tbodyDesktop = document.getElementById('debt-summary-desktop');
-        const containerMobile = document.getElementById('debt-summary-mobile');
-        tbodyDesktop.innerHTML = '';
-        containerMobile.innerHTML = '';
-
-        if (displayData.length === 0) {
-          const emptyHtml = `<tr><td colspan="4" class="px-6 py-8 text-center text-sm font-medium text-surface-500">🎉 Tuyệt vời! Không ai nợ ai.</td></tr>`;
-          tbodyDesktop.innerHTML = emptyHtml;
-          containerMobile.innerHTML = `<div class="p-6 text-center text-sm font-medium text-surface-500">🎉 Không có khoản nợ nào.</div>`;
-        } else {
-          displayData.forEach(s => {
-            grandTotal += s.amount;
-            const isHigh = s.amount > 100000;
-            const amtClass = isHigh ? 'text-danger-600' : 'text-surface-900';
-
-            // Initial generator
-            const fromInit = s.fromName.substring(0, 2).toUpperCase();
-            const toInit = s.toName.substring(0, 2).toUpperCase();
-
-            // Desktop Row
-            tbodyDesktop.innerHTML += `
-              <tr class="hover:bg-surface-50 transition">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-surface-900 flex items-center"><div class="w-6 h-6 rounded-full bg-danger-100 text-danger-700 font-bold text-[10px] flex items-center justify-center mr-2">${fromInit}</div>${s.fromName}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-surface-600">Trả <span class="font-bold text-surface-900">${s.toName}</span></td>
-                <td class="px-6 py-4 whitespace-nowrap text-right font-bold tabular-nums text-base ${amtClass}">${formatCurrency(s.amount)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-center">
-                  <button class="text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 px-3 py-1.5 rounded-lg transition active:scale-95 border-0" onclick="markPairPaid('${s.from}', '${s.to}')">Xác nhận xong ✓</button>
-                </td>
-              </tr>
-            `;
-            // Mobile Row
-            containerMobile.innerHTML += `
-              <div class="p-4 flex flex-col space-y-3">
-                <div class="flex justify-between items-center">
-                  <div class="flex items-center space-x-2">
-                    <span class="font-bold text-surface-900">${s.fromName}</span>
-                    <svg class="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                    <span class="font-medium text-surface-600">${s.toName}</span>
-                  </div>
-                </div>
-                <div class="flex justify-between items-center">
-                  <span class="font-bold tabular-nums text-lg ${amtClass}">${formatCurrency(s.amount)}</span>
-                  <button class="text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 px-4 py-2 touch-target rounded-lg transition border-0" onclick="markPairPaid('${s.from}', '${s.to}')">Xác nhận ✓</button>
-                </div>
-              </div>
-            `;
-          });
-        }
-        document.getElementById('overview-total-debt').innerText = formatCurrency(grandTotal);
+        renderDebtSummary(displayData, isDebtOptimized);
 
         let maxDebt = 0, topDebtorName = '-';
         let maxCred = 0, topCredName = '-';
@@ -482,6 +537,8 @@
 
         document.getElementById('stat-top-debtor').innerText = topDebtorName;
         document.getElementById('stat-top-creditor').innerText = topCredName;
+
+        populateFilterDropdowns(members);
 
       } catch(e) {}
     };
