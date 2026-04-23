@@ -151,9 +151,8 @@ function populateFilterDropdowns(members) {
 /**
  * Applies the current filter settings to summaryData and re-renders
  * @param {Array} summaryData - The full summary data array
- * @param {boolean} isOptimized - Whether optimize toggle is on
  */
-function applyFilter(summaryData, isOptimized) {
+function applyFilter(summaryData) {
   const debtor = document.getElementById('filter-debtor')?.value || '';
   const creditor = document.getElementById('filter-creditor')?.value || '';
   const minAmt = parseFloat(document.getElementById('filter-amount-min')?.value) || 0;
@@ -166,8 +165,9 @@ function applyFilter(summaryData, isOptimized) {
     return matchDebtor && matchCreditor && matchAmount;
   });
 
-  const processed = isOptimized ? simplifyDebts(filtered) : filtered;
-  renderDebtSummary(processed, isOptimized);
+  // isDebtOptimized is a local variable in same scope — access directly
+  const displayData = isDebtOptimized ? simplifyDebts(filtered) : filtered;
+  renderDebtSummary(displayData, isDebtOptimized);
 
   // Toggle empty row
   const emptyRow = document.getElementById('debt-filter-empty');
@@ -184,7 +184,8 @@ Thêm vào phần initialization/event listeners trong utils.html:
 ```javascript
 // Filter bar event listeners
 document.getElementById('btn-apply-filter')?.addEventListener('click', () => {
-  applyFilter(window.summaryData || [], window.isOptimized || false);
+  // Pass the raw summary data (not the optimized one) — applyFilter handles simplifyDebts internally
+  applyFilter(window._summaryData || []);
 });
 
 document.getElementById('btn-reset-filter')?.addEventListener('click', () => {
@@ -198,19 +199,24 @@ document.getElementById('btn-reset-filter')?.addEventListener('click', () => {
   if (minInput) minInput.value = '';
   if (maxInput) maxInput.value = '';
 
-  applyFilter(window.summaryData || [], window.isOptimized || false);
+  applyFilter(window._summaryData || []);
 });
 ```
 
-- [ ] **Step 4: Gọi `populateFilterDropdowns()` trong `updateDashboard()`**
+- [ ] **Step 4: Gọi `populateFilterDropdowns()` trong `updateDashboard()` + lưu raw summary**
 
-Tìm trong `updateDashboard()` đoạn load members:
+Tìm trong `updateDashboard()` đoạn:
 ```javascript
-members = JSON.parse(data);
-renderDebtSummary(summaryData, isOptimized);
+const summary = await runAsync('getSummary'); // [{from, fromName, to, toName, amount}]
 ```
 
-Thêm sau:
+Thêm **NGAY SAU** đó:
+```javascript
+// Store raw summary for filter use
+window._summaryData = summary;
+```
+
+Thêm **SAU** dòng `renderDebtSummary(displayData, isDebtOptimized);`:
 ```javascript
 populateFilterDropdowns(members);
 ```
@@ -414,6 +420,7 @@ git add -A && git commit -m "verify: debt search filter integration passed"
 ## Post-Plan Notes
 
 - Filter apply lên `summaryData` (net debts), không phải raw ChiTiet
-- `window.summaryData` và `window.isOptimized` cần được set trong `updateDashboard()` trước đó — kiểm tra xem đã có chưa
-- Nếu `window.isOptimized` chưa được set, fallback về `false`
-- Edge case `amount-min > amount-max`: logic hiện tại treat như min=0 (vì `row.amount >= 0 && row.amount <= Infinity` sẽ luôn pass min check nếu min=NaN → 0)
+- `window._summaryData` được set trong `updateDashboard()` sau khi fetch từ backend
+- `isDebtOptimized` là local variable — `applyFilter()` access trực tiếp trong cùng scope
+- Edge case `amount-min > amount-max`: treat như min=0 vì logic `row.amount >= 0` always passes if min invalid
+- `populateFilterDropdowns()` chỉ populate options, không clear filter state
