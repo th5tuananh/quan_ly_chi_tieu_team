@@ -468,55 +468,6 @@ function getSummary() {
   }
 }
 
-function addSettlement(tuId, denId, soTien) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);
-    const ss = getSpreadsheet();
-
-    // Validate: số tiền settlement không vượt net debt giữa 2 người
-    const currentSummary = JSON.parse(getSummary());
-
-    // Tính net debt từ summary (tuId nợ denId bao nhiêu)
-    let netDebt = 0;
-    currentSummary.forEach(s => {
-      if (s.from === tuId && s.to === denId) netDebt += s.amount;
-      if (s.from === denId && s.to === tuId) netDebt -= s.amount;
-    });
-
-    // Đã settlement bao nhiêu giữa 2 người này?
-    const ttSheet = ss.getSheetByName('ThanhToan');
-    const ttData = ttSheet.getDataRange().getValues();
-    let daSettled = 0;
-    if (ttData.length > 1) {
-      ttData.slice(1).forEach(row => {
-        if (row[1] === tuId && row[2] === denId) daSettled += parseFloat(row[3]) || 0;
-        if (row[1] === denId && row[2] === tuId) daSettled -= parseFloat(row[3]) || 0;
-      });
-    }
-
-    const conLai = netDebt - daSettled;
-    if (soTien > conLai + 0.01) {
-      return JSON.stringify({ error: `Số tiền vượt quá số nợ còn lại (${Math.round(conLai)}đ)` });
-    }
-
-    // Tạo settlement record
-    const ttNewData = ttSheet.getDataRange().getValues();
-    let nextNum = 1;
-    if (ttNewData.length > 1) {
-      const m = ttNewData[ttNewData.length - 1][0].match(/TT(\d+)/);
-      if (m) nextNum = parseInt(m[1]) + 1;
-    }
-    ttSheet.appendRow([`TT${String(nextNum).padStart(4,'0')}`, tuId, denId, soTien, new Date().toISOString()]);
-
-    return JSON.stringify({ success: true, daSettled: daSettled + soTien, conLai: conLai - soTien });
-  } catch(e) {
-    return JSON.stringify({ error: e.toString() });
-  } finally {
-    lock.releaseLock();
-  }
-}
-
 function editTransaction(id, newDataStr) {
   const lock = LockService.getScriptLock();
   try {
