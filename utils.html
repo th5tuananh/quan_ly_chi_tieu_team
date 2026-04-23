@@ -346,10 +346,12 @@
     });
 
     const refreshUI = async () => {
+      batchSelectedIds.clear();
       renderMembersTab();
       updatePayerDropdown();
       renderSplitList();
       renderHistory();
+      updateBatchFooter();
       await updateDashboard();
     };
 
