@@ -825,6 +825,7 @@
       const count = batchSelectedIds.size;
       if (count === 0) {
         footer.classList.add('hidden');
+        btn.disabled = true;
       } else {
         footer.classList.remove('hidden');
         countSpan.textContent = `Đã chọn: ${count} dòng`;
