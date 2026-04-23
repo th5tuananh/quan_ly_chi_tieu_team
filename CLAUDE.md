@@ -146,6 +146,68 @@ node test/test-utils.js
 ```
 Test coverage: CSV export (8), simplifyDebts (7), aggregate functions (8), validateTransactionData (7), settlement logic (10) = **40 tests**
 
+## 🤖 Behavioral Guidelines (Dành cho AI Agent)
+
+Nguyên tắc giảm LLM coding mistakes phổ biến. Áp dụng **cùng** các conventions ở trên.
+
+**Tradeoff:** Các nguyên tắc này nghiêng về **cẩn thận** hơn **tốc độ**. Với trivial tasks, dùng judgment.
+
+### 1. Think Before Coding
+
+**Không assume. Không hide confusion. Surface tradeoffs.**
+
+Trước khi implement:
+- Nêu assumptions rõ ràng. Nếu không chắc, hỏi.
+- Nếu có nhiều cách interpret, present cả — đừng pick im lặng.
+- Nếu có approach đơn giản hơn, nói ra. Push back khi có lý do.
+- Nếu something unclear, dừng. Nêu rõ cái gì đang confuse. Hỏi.
+
+### 2. Simplicity First
+
+**Code tối thiểu solve problem. Không speculative.**
+
+- Không features ngoài scope request.
+- Không abstractions cho single-use code.
+- Không "flexibility" không được ask.
+- Không error handling cho impossible scenarios.
+- Nếu viết 200 lines mà có thể 50, viết lại.
+
+Hỏi: *"Would a senior engineer nói đây là overcomplicated?"* Nếu có, simplify.
+
+### 3. Surgical Changes
+
+**Touch chỉ what you must. Clean up chỉ your own mess.**
+
+Khi edit existing code:
+- Đừng "improve" adjacent code, comments, hoặc formatting.
+- Đừng refactor things aren't broken.
+- Match existing style, even if you'd do differently.
+- Nếu notice unrelated dead code, mention it — đừng delete it.
+
+When changes create orphans:
+- Remove imports/variables/functions mà YOUR changes làm unused.
+- Đừng remove pre-existing dead code unless asked.
+
+**Test:** Every changed line nên trace trực tiếp đến user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks thành verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+Với multi-step tasks, state brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+**These guidelines working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, và clarifying questions come **before** implementation rather than after mistakes.
+
 ## ✍️ Conventions (Dành cho AI Agent)
 
 ### Backend (Code.gs)
