@@ -77,8 +77,12 @@
     const applyFilter = (summaryData) => {
       const debtorId = document.getElementById('filter-debtor')?.value || '';
       const creditorId = document.getElementById('filter-creditor')?.value || '';
-      const minAmt = parseFloat(document.getElementById('filter-amount-min')?.value) || 0;
-      const maxAmt = parseFloat(document.getElementById('filter-amount-max')?.value) || Infinity;
+      const rawMin = document.getElementById('filter-amount-min')?.value;
+      const rawMax = document.getElementById('filter-amount-max')?.value;
+      const minAmt = rawMin ? parseFloat(rawMin) : 0;
+      const maxAmt = rawMax ? parseFloat(rawMax) : Infinity;
+      if (isNaN(minAmt)) minAmt = 0;
+      if (isNaN(maxAmt)) maxAmt = Infinity;
 
       const filtered = summaryData.filter(s => {
         const matchDebtor = !debtorId || s.from === debtorId;
@@ -92,6 +96,13 @@
 
       const emptyMsg = document.getElementById('debt-filter-empty');
       if (emptyMsg) emptyMsg.classList.toggle('hidden', filtered.length > 0);
+
+      // Hide stats cards when any filter is active
+      const statsContainer = document.querySelector('.glass-card.p-6.rounded-2xl.h-fit');
+      const hasActiveFilter = debtorId || creditorId || minAmt > 0 || maxAmt < Infinity;
+      if (statsContainer) {
+        statsContainer.style.display = hasActiveFilter ? 'none' : 'block';
+      }
     };
 
     window.renderDebtSummary = (displayData, isOptimized) => {
