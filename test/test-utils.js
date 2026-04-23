@@ -346,3 +346,117 @@ const after4 = netDebtAfterSettlement(netDebts2, settled3);
 assert(after4['TV002->TV001'] === 10000, 'B nợ A 10k (A->B settlement không ảnh hưởng)');
 
 console.log('\n✓ Tất cả settlement tests passed!');
+
+// ===== TEST: markBatchPaid logic (pure JS mock) =====
+// Mimics the core logic of markBatchPaid without GAS dependencies
+const createBatchMockSpreadsheet = (chiTietRows, lichSuRows) => {
+  let ctData = chiTietRows.map(r => [...r]);
+  let lsData = lichSuRows.map(r => [...r]);
+  let nextLtNum = 1;
+  if (lsData.length > 1) {
+    const m = lsData[lsData.length - 1][0].match(/LT(\d+)/);
+    if (m) nextLtNum = parseInt(m[1]) + 1;
+  }
+  return {
+    getSheetByName: (name) => {
+      if (name === 'ChiTiet') {
+        return {
+          getDataRange: () => ({ getValues: () => ctData }),
+          getRange: (row, col) => ({
+            setValue: (val) => { ctData[row - 1][col - 1] = val; }
+          })
+        };
+      }
+      if (name === 'LichSuThanhToan') {
+        return {
+          getDataRange: () => ({ getValues: () => lsData }),
+          appendRow: (row) => {
+            lsData.push(row);
+            nextLtNum++;
+          }
+        };
+      }
+      return null;
+    }
+  };
+};
+
+// Pure JS version of markBatchPaid logic for testing
+const markBatchPaidLogic = (ss, chiTietIds) => {
+  const ctSheet = ss.getSheetByName('ChiTiet');
+  const ctData = ctSheet.getDataRange().getValues();
+  const lsSheet = ss.getSheetByName('LichSuThanhToan');
+  const lsData = lsSheet.getDataRange().getValues();
+
+  let nextNum = 1;
+  if (lsData.length > 1) {
+    const m = lsData[lsData.length - 1][0].match(/LT(\d+)/);
+    if (m) nextNum = parseInt(m[1]) + 1;
+  }
+
+  const idSet = new Set(chiTietIds);
+  const now = new Date().toISOString();
+  let count = 0;
+
+  for (let i = 1; i < ctData.length; i++) {
+    if (idSet.has(ctData[i][0])) {
+      ctSheet.getRange(i + 1, 5).setValue(true);
+      lsSheet.appendRow([
+        `LT${String(nextNum).padStart(4, '0')}`,
+        ctData[i][0],
+        now,
+        ''
+      ]);
+      nextNum++;
+      count++;
+    }
+  }
+  return { success: true, count };
+};
+
+// Test data
+const batchCtRows = [
+  ['id', 'giaoDichId', 'thanhVienId', 'soTien', 'daThanhToan'],
+  ['CT001', 'GD001', 'TV001', '30000', false],
+  ['CT002', 'GD001', 'TV002', '30000', false],
+  ['CT003', 'GD002', 'TV001', '20000', false],
+];
+const batchLsRows = [
+  ['id', 'chiTietId', 'ngayThanhToan', 'nguoiXacNhan'],
+];
+
+// Test 1: Mark CT001 and CT002 as paid
+const batchSs1 = createBatchMockSpreadsheet(batchCtRows, batchLsRows);
+const result1 = markBatchPaidLogic(batchSs1, ['CT001', 'CT002']);
+assert(result1.success === true, 'markBatchPaid: returns success=true');
+assert(result1.count === 2, 'markBatchPaid: marks 2 items');
+assert(batchSs1.getSheetByName('ChiTiet').getDataRange().getValues()[1][4] === true, 'markBatchPaid: CT001 daThanhToan=true');
+assert(batchSs1.getSheetByName('ChiTiet').getDataRange().getValues()[2][4] === true, 'markBatchPaid: CT002 daThanhToan=true');
+assert(batchSs1.getSheetByName('ChiTiet').getDataRange().getValues()[3][4] === false, 'markBatchPaid: CT003 still false');
+
+// Test 2: Audit log has 2 new entries
+const lsAfter = batchSs1.getSheetByName('LichSuThanhToan').getDataRange().getValues();
+assert(lsAfter.length === 3, 'markBatchPaid: LichSu has 3 rows (header + 2 logs)');
+assert(lsAfter[1][0] === 'LT0001', 'markBatchPaid: first log id=LT0001');
+assert(lsAfter[1][1] === 'CT001', 'markBatchPaid: first log chiTietId=CT001');
+assert(lsAfter[2][0] === 'LT0002', 'markBatchPaid: second log id=LT0002');
+assert(lsAfter[2][1] === 'CT002', 'markBatchPaid: second log chiTietId=CT002');
+
+// Test 3: Mark single item
+const batchSs2 = createBatchMockSpreadsheet(batchCtRows, batchLsRows);
+const result2 = markBatchPaidLogic(batchSs2, ['CT003']);
+assert(result2.count === 1, 'markBatchPaid: single item count=1');
+const ctAfter3 = batchSs2.getSheetByName('ChiTiet').getDataRange().getValues();
+assert(ctAfter3[3][4] === true, 'markBatchPaid: CT003 now true');
+
+// Test 4: Empty array returns count=0
+const batchSs3 = createBatchMockSpreadsheet(batchCtRows, batchLsRows);
+const result3 = markBatchPaidLogic(batchSs3, []);
+assert(result3.count === 0, 'markBatchPaid: empty array count=0');
+
+// Test 5: IDs not found are silently ignored
+const batchSs4 = createBatchMockSpreadsheet(batchCtRows, batchLsRows);
+const result4 = markBatchPaidLogic(batchSs4, ['CT001', 'NOTFOUND']);
+assert(result4.count === 1, 'markBatchPaid: ignores non-existent IDs');
+
+console.log('\n✓ Tất cả markBatchPaid tests passed!');

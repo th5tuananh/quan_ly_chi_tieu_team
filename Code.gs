@@ -362,6 +362,56 @@ function markAsPaidWithLog(chiTietId, confirmedBy) {
   }
 }
 
+/**
+ * Marks multiple ChiTiet as paid + writes audit log for each
+ * @param {string[]} chiTietIds - array of ChiTietId strings
+ * @returns {string} JSON { success: true, count: X }
+ */
+function markBatchPaid(chiTietIds) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = getSpreadsheet();
+    const ctSheet = ss.getSheetByName('ChiTiet');
+    const ctData = ctSheet.getDataRange().getValues();
+    const lsSheet = ss.getSheetByName('LichSuThanhToan');
+    const lsData = lsSheet.getDataRange().getValues();
+
+    // Find next LT ID
+    let nextNum = 1;
+    if (lsData.length > 1) {
+      const m = lsData[lsData.length - 1][0].match(/LT(\d+)/);
+      if (m) nextNum = parseInt(m[1]) + 1;
+    }
+
+    // Build set for fast lookup
+    const idSet = new Set(chiTietIds);
+    const now = new Date().toISOString();
+    let count = 0;
+
+    // Iterate ChiTiet rows: col[0]=id, col[4]=daThanhToan
+    for (let i = 1; i < ctData.length; i++) {
+      if (idSet.has(ctData[i][0])) {
+        ctSheet.getRange(i + 1, 5).setValue(true);
+        lsSheet.appendRow([
+          `LT${String(nextNum).padStart(4, '0')}`,
+          ctData[i][0], // chiTietId
+          now,
+          '' // confirmedBy empty
+        ]);
+        nextNum++;
+        count++;
+      }
+    }
+
+    return JSON.stringify({ success: true, count });
+  } catch(e) {
+    return JSON.stringify({ error: e.toString() });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function markAllPaidForMember(debtorId, creditorId) {
   const lock = LockService.getScriptLock();
   try {
