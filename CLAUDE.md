@@ -68,15 +68,18 @@ Xác nhận "đã trả hết"
 ├── edit-modal.html      # Partial: modal chỉnh sửa giao dịch (F3)
 ├── tab-tong-quan.html   # Partial: tab Tổng Quan + debt toggle (F1)
 ├── tab-tao-don.html     # Partial: tab Tạo Đơn
-├── tab-lich-su.html     # Partial: tab Lịch Sử + CSV export (F5b)
+├── tab-lich-su.html     # Partial: tab Lịch Sử + CSV export (F5b) + Batch Settlement footer (F6)
 ├── tab-bao-cao.html     # Partial: tab Báo Cáo analytics (F2)
 ├── tab-thanh-vien.html  # Partial: tab Thành Viên
 ├── test/
 │   └── test-utils.js    # Pure Node.js tests
 └── docs/superpowers/
+    ├── ideas/
+    │   └── ideas.md          # Backlog ý tưởng tính năng
     ├── plans/
     │   ├── 2026-04-18-5-features-implementation.md
-    │   └── 2026-04-22-debt-settlement-design.md
+    │   ├── 2026-04-22-debt-settlement-design.md
+    │   └── 2026-04-23-batch-settlement.md
     └── specs/
 ```
 
@@ -140,11 +143,18 @@ Xác nhận "đã trả hết"
 - Hàm: `exportToCSV(transactions, members)`
 - Nút "Xuất CSV" trong filter bar tab Lịch Sử
 
+### F6 — Batch Settlement (Duyệt trả nợ hàng loạt)
+- Checkbox hierarchy trong tab Lịch Sử: header GD tick = chọn ALL ChiTiet unpaid, row checkbox = chọn từng người
+- Footer cố định (`fixed bottom-0`) hiện số đã chọn + nút "Xác nhận đã trả (X)"
+- Backend: `markBatchPaid(chiTietIds[])` — nhận array, atomic mark `daThanhToan=true` + audit log cho từng dòng
+- Frontend: `batchSelectedIds` Set + `handleBatchToggle()`, `handleBatchHeaderToggle()`, `updateBatchFooter()`, `submitBatchSettlement()`
+- `refreshUI()` clear selection và ẩn footer sau khi submit thành công
+
 ## 🔧 Testing
 ```bash
 node test/test-utils.js
 ```
-Test coverage: CSV export (8), simplifyDebts (7), aggregate functions (8), validateTransactionData (7), settlement logic (10) = **40 tests**
+Test coverage: CSV export (8), simplifyDebts (7), aggregate functions (8), validateTransactionData (7), settlement logic (10), markBatchPaid (7) = **47 tests**
 
 ## 🤖 Behavioral Guidelines (Dành cho AI Agent)
 
