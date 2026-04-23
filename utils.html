@@ -155,6 +155,8 @@
       });
       document.getElementById('overview-total-debt').innerText = formatCurrency(grandTotal);
     };
+
+    const populateFilterDropdowns = (members) => {
       const debtorSelect = document.getElementById('filter-debtor');
       const creditorSelect = document.getElementById('filter-creditor');
       if (!debtorSelect || !creditorSelect) return;
