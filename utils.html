@@ -360,6 +360,59 @@
       });
     };
 
+    function renderHeatmap(weeklyData) {
+      const container = document.getElementById('heatmap-container');
+      if (!container) return;
+
+      if (weeklyData.length === 0) {
+        container.innerHTML = '<p class="text-surface-500 text-sm">Chưa có đủ dữ liệu (cần ≥4 tuần)</p>';
+        return;
+      }
+
+      // Group by week
+      const byWeek = {};
+      weeklyData.forEach(d => {
+        if (!byWeek[d.weekIndex]) byWeek[d.weekIndex] = {};
+        byWeek[d.weekIndex][d.dayOfWeek] = d.avgSpend;
+      });
+
+      const maxSpend = Math.max(...weeklyData.map(d => d.avgSpend)) || 1;
+      const dayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      const weeks = Object.keys(byWeek).sort((a, b) => parseInt(a) - parseInt(b)).slice(0, 5);
+
+      let html = `<div class="flex gap-2">
+        <div class="flex flex-col gap-1 text-xs text-gray-400 pt-5">`;
+
+      // Day labels
+      html += dayLabels.map(d => `<div class="h-8 flex items-center">${d}</div>`).join('');
+      html += `</div>`;
+
+      // Grid
+      html += `<div class="flex gap-1">`;
+      weeks.forEach(weekIdx => {
+        html += `<div class="flex flex-col gap-1">`;
+        for (let day = 0; day < 7; day++) {
+          const spend = byWeek[weekIdx][day] || 0;
+          const intensity = spend / maxSpend;
+          const bg = intensity > 0 ? `rgba(59, 130, 246, ${0.1 + intensity * 0.9})` : 'rgba(229, 231, 235, 0.5)';
+          const tooltip = spend > 0 ? `${dayLabels[day]}, Tuần ${5 - parseInt(weekIdx)}: ${formatCurrency(spend)}` : `${dayLabels[day]}: Không có chi tiêu`;
+          html += `<div class="w-10 h-8 rounded cursor-pointer hover:ring-2 hover:ring-primary-400 transition-all"
+                    style="background: ${bg}"
+                    title="${tooltip}"
+                    onclick="showDayTransactions(${weekIdx}, ${day})"></div>`;
+        }
+        html += `</div>`;
+      });
+      html += `</div></div>`;
+
+      container.innerHTML = html;
+    }
+
+    window.showDayTransactions = (weekIndex, dayOfWeek) => {
+      // TODO: drilldown - show transactions for this day
+      console.log('Show transactions for week', weekIndex, 'day', dayOfWeek);
+    };
+
     function formatCurrencyShort(v) {
       if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
       if (v >= 1000) return (v / 1000).toFixed(0) + 'K';
