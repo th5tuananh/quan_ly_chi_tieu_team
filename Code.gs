@@ -595,7 +595,7 @@ function getTrendAnalytics(monthFrom, monthTo, sources, memberId) {
       const toDate = lastDay.toISOString().split('T')[0];
       filtered = filtered.filter(r => r[headers.indexOf('ngay')] <= toDate);
     }
-    if (sources && sources.length > 0 && sources.length < 3) {
+    if (sources && sources.length > 0) {
       filtered = filtered.filter(r => sources.includes(r[headers.indexOf('nguon')]));
     }
     if (memberId) {
@@ -739,7 +739,7 @@ function aggregateMemberRanked(rows, headers) {
   const idxTongTien = headers.indexOf('tongTien');
   const idxNgay = headers.indexOf('ngay');
 
-  const memberSheet = ss.getSheetByName('ThanhVien');
+  const memberSheet = getSpreadsheet().getSheetByName('ThanhVien');
   const memberData = memberSheet.getDataRange().getValues();
   const memberHeaders = memberData[0];
   const members = {};
