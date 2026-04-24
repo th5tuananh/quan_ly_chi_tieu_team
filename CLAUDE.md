@@ -164,9 +164,9 @@ Xác nhận "đã trả hết"
 
 ## 🔧 Testing
 ```bash
-node test/test-utils.js
+node test/test-utils.js && node test/test-trend.js
 ```
-Test coverage: CSV export (8), simplifyDebts (7), aggregate functions (8), validateTransactionData (7), settlement logic (10), markBatchPaid (7) = **47 tests**
+Test coverage: CSV export (8), simplifyDebts (7), aggregate functions (8), validateTransactionData (7), settlement logic (10), markBatchPaid (7), trend analytics (20) assertions = **67 assertion lines** across 2 test files
 
 ## 🤖 Behavioral Guidelines (Dành cho AI Agent)
 
