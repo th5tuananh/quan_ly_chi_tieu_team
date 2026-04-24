@@ -105,6 +105,47 @@
       }
     };
 
+    // --- TREND FILTER HELPERS ---
+    function getCheckedSources(prefix) {
+      const checkboxes = document.querySelectorAll(`[id^="${prefix}"]`);
+      return Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+    }
+
+    function populateTrendMemberDropdown() {
+      const sel = document.getElementById('trend-member');
+      if (!sel || members.length === 0) return;
+
+      // Keep first "Tất cả" option
+      sel.innerHTML = '<option value="">Tất cả</option>' +
+        members.map(m => `<option value="${m.id}">${m.ten}</option>`).join('');
+    }
+
+    function applyTrendFilter() {
+      _trendFilters = {
+        monthFrom: document.getElementById('trend-month-from').value || null,
+        monthTo: document.getElementById('trend-month-to').value || null,
+        sources: getCheckedSources('trend-source-'),
+        memberId: document.getElementById('trend-member').value || null
+      };
+      _trendData = null; // Clear cache
+      renderTrend();
+    }
+
+    function resetTrendFilter() {
+      document.getElementById('trend-month-from').value = '';
+      document.getElementById('trend-month-to').value = '';
+      document.querySelectorAll('[id^="trend-source-"]').forEach(cb => cb.checked = true);
+      document.getElementById('trend-member').value = '';
+      _trendFilters = {
+        monthFrom: null,
+        monthTo: null,
+        sources: ['Grab', 'ShopeeFood', 'Bên ngoài'],
+        memberId: null
+      };
+      _trendData = null;
+      renderTrend();
+    }
+
     window.renderDebtSummary = (displayData, isOptimized) => {
       const tbodyDesktop = document.getElementById('debt-summary-desktop');
       const containerMobile = document.getElementById('debt-summary-mobile');
@@ -730,6 +771,11 @@
       // Analytics filter
       document.getElementById('analytics-month').addEventListener('change', renderAnalytics);
 
+      // Trend filter event listeners
+      document.getElementById('btn-trend-apply')?.addEventListener('click', applyTrendFilter);
+      document.getElementById('btn-trend-reset')?.addEventListener('click', resetTrendFilter);
+      document.getElementById('btn-trend-retry')?.addEventListener('click', () => renderTrend());
+
       // Debt filter event listeners
       document.getElementById('btn-apply-filter')?.addEventListener('click', () => {
         applyFilter(window._summaryData || []);
@@ -807,6 +853,7 @@
       renderSplitList();
       renderHistory();
       updateBatchFooter();
+      populateTrendMemberDropdown();
       await updateDashboard();
     };
 
@@ -841,6 +888,7 @@
           document.getElementById(targetId).classList.add('active');
           window.scrollTo({top:0, behavior:'smooth'});
           if (targetId === 'tab-bao-cao') renderAnalytics();
+          if (targetId === 'tab-xu-huong') renderTrend();
         });
       });
     };
