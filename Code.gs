@@ -564,3 +564,230 @@ function editTransaction(id, newDataStr) {
     lock.releaseLock();
   }
 }
+
+/**
+ * Trả về trend analytics: monthly trend, forecast, weekly heatmap, source breakdown, member ranked
+ * @param {string} monthFrom - Format "YYYY-MM" hoặc null cho all time
+ * @param {string} monthTo - Format "YYYY-MM" hoặc null cho current month
+ * @param {Array} sources - Array của source filter hoặc null cho all
+ * @param {string} memberId - Member ID hoặc null cho all
+ */
+function getTrendAnalytics(monthFrom, monthTo, sources, memberId) {
+  try {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+
+    const sheet = SpreadsheetApp.getSpreadsheet().getSheetByName('GiaoDich');
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const rows = data.slice(1);
+
+    // Filter transactions
+    let filtered = rows.filter(r => r[headers.indexOf('trangThai')] !== 'DaHuy');
+
+    if (monthFrom) {
+      filtered = filtered.filter(r => r[headers.indexOf('ngay')] >= monthFrom + '-01');
+    }
+    if (monthTo) {
+      const lastDay = new Date(monthTo + '-01');
+      lastDay.setMonth(lastDay.getMonth() + 1);
+      const toDate = lastDay.toISOString().split('T')[0];
+      filtered = filtered.filter(r => r[headers.indexOf('ngay')] <= toDate);
+    }
+    if (sources && sources.length > 0 && sources.length < 3) {
+      filtered = filtered.filter(r => sources.includes(r[headers.indexOf('nguon')]));
+    }
+    if (memberId) {
+      filtered = filtered.filter(r => r[headers.indexOf('nguoiTra')] === memberId);
+    }
+
+    const result = {
+      monthlyTrend: aggregateByMonth(filtered, headers),
+      forecast: computeForecast(aggregateByMonth(filtered, headers)),
+      weeklyHeatmap: aggregateWeeklyHeatmap(filtered, headers),
+      sourceBreakdown: aggregateSourceBreakdown(filtered, headers),
+      memberRanked: aggregateMemberRanked(filtered, headers)
+    };
+
+    lock.releaseLock();
+    return JSON.stringify(result);
+
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+/**
+ * Aggregate chi tiêu theo tháng (6 tháng gần nhất)
+ */
+function aggregateByMonth(rows, headers) {
+  const idxNgay = headers.indexOf('ngay');
+  const idxTongTien = headers.indexOf('tongTien');
+  const now = new Date();
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+  const result = {};
+  rows.forEach(r => {
+    const d = r[idxNgay];
+    if (!d) return;
+    const month = typeof d === 'string' ? d.substring(0, 7) : d.toISOString().substring(0, 7);
+    if (month >= sixMonthsAgo.toISOString().substring(0, 7)) {
+      result[month] = (result[month] || 0) + (parseFloat(r[idxTongTien]) || 0);
+    }
+  });
+
+  return Object.entries(result)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-6)
+    .map(([month, total]) => ({ month, total }));
+}
+
+/**
+ * Compute forecast = median of last 3 months
+ */
+function computeForecast(monthlyTrend) {
+  if (monthlyTrend.length < 3) return null;
+  const last3 = monthlyTrend.slice(-3).map(m => m.total);
+  const sorted = [...last3].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const nextMonth = new Date();
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  return {
+    nextMonth: nextMonth.toISOString().substring(0, 7),
+    predicted: median,
+    method: 'median'
+  };
+}
+
+/**
+ * Aggregate chi tiêu theo ngày trong tuần (4-5 tuần gần nhất)
+ */
+function aggregateWeeklyHeatmap(rows, headers) {
+  const idxNgay = headers.indexOf('ngay');
+  const idxTongTien = headers.indexOf('tongTien');
+  const now = new Date();
+  const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
+
+  const weeks = {};
+  rows.forEach(r => {
+    const d = r[idxNgay];
+    if (!d) return;
+    const date = typeof d === 'string' ? new Date(d) : d;
+    if (date < fourWeeksAgo) return;
+
+    const dayOfWeek = (date.getDay() + 6) % 7;
+    const weekIndex = Math.floor((now.getTime() - date.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    const key = weekIndex;
+    if (!weeks[key]) weeks[key] = {};
+    if (!weeks[key][dayOfWeek]) weeks[key][dayOfWeek] = [];
+    weeks[key][dayOfWeek].push(parseFloat(r[idxTongTien]) || 0);
+  });
+
+  const result = [];
+  Object.entries(weeks).forEach(([weekIndex, days]) => {
+    Object.entries(days).forEach(([dayOfWeek, amounts]) => {
+      const avg = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+      result.push({ weekIndex: parseInt(weekIndex), dayOfWeek: parseInt(dayOfWeek), avgSpend: avg });
+    });
+  });
+  return result;
+}
+
+/**
+ * Aggregate % theo nguồn theo tháng
+ */
+function aggregateSourceBreakdown(rows, headers) {
+  const idxNgay = headers.indexOf('ngay');
+  const idxTongTien = headers.indexOf('tongTien');
+  const idxNguon = headers.indexOf('nguon');
+  const now = new Date();
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+  const byMonth = {};
+  rows.forEach(r => {
+    const d = r[idxNgay];
+    if (!d) return;
+    const month = typeof d === 'string' ? d.substring(0, 7) : d.toISOString().substring(0, 7);
+    if (month < sixMonthsAgo.toISOString().substring(0, 7)) return;
+    if (!byMonth[month]) byMonth[month] = { grab: 0, shopee: 0, outside: 0, total: 0 };
+
+    const source = r[idxNguon] || 'outside';
+    const amount = parseFloat(r[idxTongTien]) || 0;
+    byMonth[month].total += amount;
+    if (source === 'Grab') byMonth[month].grab += amount;
+    else if (source === 'ShopeeFood') byMonth[month].shopee += amount;
+    else byMonth[month].outside += amount;
+  });
+
+  return Object.entries(byMonth)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-6)
+    .map(([month, data]) => ({
+      month,
+      grab: data.total > 0 ? Math.round(data.grab / data.total * 100) : 0,
+      shopee: data.total > 0 ? Math.round(data.shopee / data.total * 100) : 0,
+      outside: data.total > 0 ? Math.round(data.outside / data.total * 100) : 0
+    }));
+}
+
+/**
+ * Aggregate top members by spend + consistency score + sparkline
+ */
+function aggregateMemberRanked(rows, headers) {
+  const idxNguoiTra = headers.indexOf('nguoiTra');
+  const idxTongTien = headers.indexOf('tongTien');
+  const idxNgay = headers.indexOf('ngay');
+
+  const memberSheet = SpreadsheetApp.getSpreadsheet().getSheetByName('ThanhVien');
+  const memberData = memberSheet.getDataRange().getValues();
+  const memberHeaders = memberData[0];
+  const members = {};
+  memberData.slice(1).forEach(r => {
+    members[r[memberHeaders.indexOf('id')]] = r[memberHeaders.indexOf('ten')];
+  });
+
+  const byMember = {};
+  rows.forEach(r => {
+    const id = r[idxNguoiTra];
+    if (!id) return;
+    if (!byMember[id]) {
+      byMember[id] = { name: members[id] || id, monthly: {}, total: 0 };
+    }
+    const amount = parseFloat(r[idxTongTien]) || 0;
+    byMember[id].total += amount;
+    const month = typeof r[idxNgay] === 'string' ? r[idxNgay].substring(0, 7) : r[idxNgay].toISOString().substring(0, 7);
+    byMember[id].monthly[month] = (byMember[id].monthly[month] || 0) + amount;
+  });
+
+  const result = Object.entries(byMember)
+    .map(([id, data]) => {
+      const values = Object.values(data.monthly);
+      const mean = values.reduce((a, b) => a + b, 0) / (values.length || 1);
+      const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length || 1);
+      const stddev = Math.sqrt(variance);
+      const consistencyScore = mean > 0 ? stddev / mean : 0;
+
+      const now = new Date();
+      const sparkline = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const m = d.toISOString().substring(0, 7);
+        sparkline.push(data.monthly[m] || 0);
+      }
+
+      return {
+        id,
+        name: data.name,
+        totalSpend: data.total,
+        consistencyScore: Math.round(consistencyScore * 100) / 100,
+        sparkline
+      };
+    })
+    .sort((a, b) => b.totalSpend - a.totalSpend)
+    .slice(0, 5);
+
+  return result;
+}
+
+/* Node.js test exports - ignore in GAS */
+/* module.exports = { aggregateByMonth, computeForecast, aggregateWeeklyHeatmap, aggregateSourceBreakdown, aggregateMemberRanked }; */
