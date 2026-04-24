@@ -121,9 +121,15 @@
     }
 
     function applyTrendFilter() {
+      const monthFrom = document.getElementById('trend-month-from').value;
+      const monthTo = document.getElementById('trend-month-to').value;
+      if (monthFrom && monthTo && monthFrom > monthTo) {
+        alert('Ngày bắt đầu phải trước ngày kết thúc');
+        return;
+      }
       _trendFilters = {
-        monthFrom: document.getElementById('trend-month-from').value || null,
-        monthTo: document.getElementById('trend-month-to').value || null,
+        monthFrom: monthFrom || null,
+        monthTo: monthTo || null,
         sources: getCheckedSources('trend-source-'),
         memberId: document.getElementById('trend-member').value || null
       };
