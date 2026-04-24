@@ -49,6 +49,7 @@
 | **F5b** | Xuất CSV | Export lịch sử ra file CSV (UTF-8 BOM) |
 | **F6** | Batch Settlement | Chọn nhiều dòng nợ, duyệt trả hàng loạt |
 | **F7** | Debt Search & Filter | Filter nợ theo người nợ/chủ nợ/khoảng tiền, Layout B 2-row fixed |
+| **F8** | Advanced Analytics | Tab "Xu Hướng": trend forecast, heatmap, stacked area, member ranked list |
 
 ### 🇬🇧 Features
 
@@ -61,6 +62,7 @@
 | **F5b** | CSV Export | Export transaction history to CSV (UTF-8 BOM) |
 | **F6** | Batch Settlement | Select multiple debt rows, batch mark as paid |
 | **F7** | Debt Search & Filter | Filter debts by debtor/creditor/amount range, Layout B 2-row fixed |
+| **F8** | Advanced Analytics | "Xu Hướng" tab: trend forecast, heatmap, stacked area, member ranked list |
 
 ---
 
@@ -183,19 +185,23 @@
 ├── tab-tao-don.html     # Partial: tab Tạo Đơn
 ├── tab-lich-su.html     # Partial: tab Lịch Sử + CSV export + Batch Settlement
 ├── tab-bao-cao.html     # Partial: tab Báo Cáo analytics
+├── tab-xu-huong.html    # Partial: tab Xu Hướng (Advanced Analytics)
 ├── tab-thanh-vien.html  # Partial: tab Thành Viên
 ├── test/
-│   └── test-utils.js    # Pure Node.js tests (không cần GAS runtime)
+│   ├── test-utils.js    # Pure Node.js tests (không cần GAS runtime)
+│   └── test-trend.js    # Tests cho trend analytics functions
 ├── docs/superpowers/
 │   ├── ideas/           # Backlog các ý tưởng tính năng
 │   ├── plans/           # Chi tiết implementation plans
 │   │   ├── 2026-04-18-5-features-implementation.md
 │   │   ├── 2026-04-22-debt-settlement-design.md
 │   │   ├── 2026-04-23-batch-settlement.md
-│   │   └── 2026-04-24-filter-bar-redesign.md
+│   │   ├── 2026-04-24-filter-bar-redesign.md
+│   │   └── 2026-04-24-advanced-analytics.md
 │   └── specs/
 │       ├── 2026-04-23-debt-search-filter-design.md
-│       └── 2026-04-24-filter-bar-redesign.md
+│       ├── 2026-04-24-filter-bar-redesign.md
+│       └── 2026-04-24-advanced-analytics-design.md
 └── README.md           # This file
 ```
 
@@ -237,13 +243,13 @@
 ### 🇻🇳 Chạy tests
 
 ```bash
-node test/test-utils.js
+node test/test-utils.js && node test/test-trend.js
 ```
 
 ### 🇬🇧 Run tests
 
 ```bash
-node test/test-utils.js
+node test/test-utils.js && node test/test-trend.js
 ```
 
 ### Test Coverage / Phạm vi tests
@@ -256,7 +262,8 @@ node test/test-utils.js
 | validateTransactionData | 7 | Form validation |
 | Settlement Logic | 10 | Debt calculation |
 | markBatchPaid | 7 | Batch settlement |
-| **Total** | **47** | **All passing** |
+| Trend Analytics | 20 | aggregateByMonth, computeForecast, heatmap, source breakdown, member ranked |
+| **Total** | **67 assertions** | **All passing** |
 
 ---
 

@@ -162,6 +162,16 @@ Xác nhận "đã trả hết"
 - Hàm: `populateFilterDropdowns(members)`, `applyFilter(summaryData)`, `renderDebtSummary(displayData, isOptimized)`
 - `window._summaryData` lưu raw summary để filter apply lên data gốc
 
+### F8 — Advanced Analytics: Trend Analysis & Predictions (Tab Xu Hướng)
+- Tab "Xu Hướng" mới với 4 charts: bar+line forecast, heatmap, stacked area, ranked list
+- Backend: `getTrendAnalytics(monthFrom, monthTo, sources, memberId)` trả 5 data sections
+- `aggregateByMonth()`: trend 6 tháng, `computeForecast()`: median 3 tháng gần nhất
+- `aggregateWeeklyHeatmap()`: chi tiêu theo ngày trong tuần (T2-CN, 4-5 tuần)
+- `aggregateSourceBreakdown()`: % Grab/ShopeeFood/Bên ngoài theo tháng
+- `aggregateMemberRanked()`: top 5 thành viên với consistency score + sparkline 6 tháng
+- Hàm: `renderTrend()`, `renderTrendForecast()`, `renderHeatmap()`, `renderSourceArea()`, `renderMemberRanked()`
+- Filter controls: month range, source checkboxes, member dropdown, apply/reset
+
 ## 🔧 Testing
 ```bash
 node test/test-utils.js && node test/test-trend.js

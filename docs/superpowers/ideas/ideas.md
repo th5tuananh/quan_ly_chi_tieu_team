@@ -43,15 +43,25 @@
 ---
 
 ## 3. 📊 Advanced Analytics: Trend Analysis & Predictions
-**Status:** 🟢 Chưa thực hiện
+**Status:** 🟢 **Đã thực hiện**
 
 **Problem:** Tab Báo Cáo hiện chỉ có 3 charts cơ bản, không có so sánh xu hướng.
 
 **Giải pháp:**
-- Trend line chart: Chi tiêu 6 tháng gần nhất với đường xu hướng
-- Month-over-month comparison: % tăng/giảm so với tháng trước
-- Top expense categories: Grab vs ShopeeFood vs khác
-- Spending velocity: Trung bình chi tiêu mỗi tuần/tháng
+- Tab "Xu Hướng" mới với 4 charts: bar+line forecast, heatmap, stacked area, ranked list
+- Trend line chart: Chi tiêu 6 tháng gần nhất với đường dự đoán (median)
+- Weekly heatmap: Chi tiêu theo ngày trong tuần (T2-CN)
+- Source stacked area: Grab vs ShopeeFood vs Bên ngoài theo tháng
+- Member ranked list: Top 5 thành viên với sparkline và consistency badge
+
+**Files changed:**
+- `Code.gs` — `getTrendAnalytics()` + 5 helper functions
+- `tab-xu-huong.html` — New tab partial
+- `utils.html` — `renderTrend()`, `renderTrendForecast()`, `renderHeatmap()`, `renderSourceArea()`, `renderMemberRanked()`
+- `index.html` — Nav item + `include('tab-xu-huong')`
+
+**Spec:** `docs/superpowers/specs/2026-04-24-advanced-analytics-design.md`
+**Plan:** `docs/superpowers/plans/2026-04-24-advanced-analytics.md`
 
 ---
 
