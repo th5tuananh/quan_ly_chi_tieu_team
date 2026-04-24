@@ -211,6 +211,87 @@
     let isDebtOptimized = false;
     let monthlyChart = null, sourceChart = null, memberChart = null;
 
+    // --- TREND TAB STATE ---
+    let _trendData = null;
+    let _trendFilters = {
+      monthFrom: null,
+      monthTo: null,
+      sources: ['Grab', 'ShopeeFood', 'Bên ngoài'],
+      memberId: null
+    };
+
+    // --- TREND HELPERS ---
+    function showLoading(id, elementIds, show) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (show) {
+        el.classList.remove('hidden');
+        elementIds.forEach(eid => {
+          const e = document.getElementById(eid);
+          if (e) e.style.visibility = 'hidden';
+        });
+      } else {
+        el.classList.add('hidden');
+        elementIds.forEach(eid => {
+          const e = document.getElementById(eid);
+          if (e) e.style.visibility = 'visible';
+        });
+      }
+    }
+
+    function hideError(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    }
+
+    function showError(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('hidden');
+    }
+
+    async function getTrendData(filters) {
+      showLoading('trend-loading', ['chart-trend-forecast', 'chart-source-area', 'heatmap-container', 'member-ranked-list'], true);
+      hideError('trend-error');
+
+      return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(result => {
+            showLoading('trend-loading', ['chart-trend-forecast', 'chart-source-area', 'heatmap-container', 'member-ranked-list'], false);
+            try {
+              const data = JSON.parse(result);
+              if (data.error) {
+                showError('trend-error');
+                reject(data.error);
+              } else {
+                _trendData = data;
+                resolve(data);
+              }
+            } catch (e) {
+              showError('trend-error');
+              reject(e);
+            }
+          })
+          .withFailureHandler(err => {
+            showLoading('trend-loading', ['chart-trend-forecast', 'chart-source-area', 'heatmap-container', 'member-ranked-list'], false);
+            showError('trend-error');
+            reject(err);
+          })
+          .getTrendAnalytics(filters.monthFrom, filters.monthTo, filters.sources, filters.memberId);
+      });
+    }
+
+    async function renderTrend() {
+      if (!_trendData) {
+        await getTrendData(_trendFilters);
+      }
+      if (!_trendData) return;
+
+      renderTrendForecast(_trendData.monthlyTrend, _trendData.forecast);
+      renderHeatmap(_trendData.weeklyHeatmap);
+      renderSourceArea(_trendData.sourceBreakdown);
+      renderMemberRanked(_trendData.memberRanked);
+    }
+
     const renderAnalytics = () => {
       if (typeof Chart === 'undefined') {
         document.getElementById('analytics-no-chart').classList.remove('hidden');
