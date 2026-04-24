@@ -577,7 +577,8 @@ function getTrendAnalytics(monthFrom, monthTo, sources, memberId) {
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
 
-    const sheet = SpreadsheetApp.getSpreadsheet().getSheetByName('GiaoDich');
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName('GiaoDich');
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
     const rows = data.slice(1);
@@ -738,7 +739,7 @@ function aggregateMemberRanked(rows, headers) {
   const idxTongTien = headers.indexOf('tongTien');
   const idxNgay = headers.indexOf('ngay');
 
-  const memberSheet = SpreadsheetApp.getSpreadsheet().getSheetByName('ThanhVien');
+  const memberSheet = ss.getSheetByName('ThanhVien');
   const memberData = memberSheet.getDataRange().getValues();
   const memberHeaders = memberData[0];
   const members = {};
