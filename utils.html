@@ -292,6 +292,80 @@
       renderMemberRanked(_trendData.memberRanked);
     }
 
+    window.renderTrendForecast = (monthlyTrend, forecast) => {
+      const ctx = document.getElementById('chart-trend-forecast');
+      if (!ctx) return;
+
+      if (window.trendChart) window.trendChart.destroy();
+
+      const labels = monthlyTrend.map(m => {
+        const [y, mo] = m.month.split('-');
+        return `Thg ${parseInt(mo)}`;
+      });
+
+      const data = monthlyTrend.map(m => m.total);
+
+      // Add forecast point
+      let forecastData = null;
+      if (forecast && monthlyTrend.length >= 3) {
+        const [y, mo] = forecast.nextMonth.split('-');
+        labels.push(`Thg ${parseInt(mo)} (dự đoán)`);
+        forecastData = forecast.predicted;
+      }
+
+      window.trendChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Chi tiêu thực tế',
+              data: forecastData !== null ? [...data, null] : data,
+              backgroundColor: '#3B82F6',
+              borderRadius: 6
+            },
+            {
+              type: 'line',
+              label: 'Dự đoán',
+              data: forecastData !== null ? [...Array(data.length).fill(null), forecastData] : [],
+              borderColor: '#F97316',
+              borderDash: [5, 5],
+              pointBackgroundColor: '#F97316',
+              pointRadius: 6,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  return `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { callback: v => formatCurrencyShort(v) }
+            }
+          }
+        }
+      });
+    };
+
+    function formatCurrencyShort(v) {
+      if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+      if (v >= 1000) return (v / 1000).toFixed(0) + 'K';
+      return v;
+    }
+
     const renderAnalytics = () => {
       if (typeof Chart === 'undefined') {
         document.getElementById('analytics-no-chart').classList.remove('hidden');
