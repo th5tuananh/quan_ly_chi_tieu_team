@@ -567,6 +567,76 @@
       });
     }
 
+    // --- MEMBER RANKED LIST ---
+    function renderMemberRanked(memberRanked) {
+      const container = document.getElementById('member-ranked-list');
+      if (!container) return;
+
+      if (memberRanked.length === 0) {
+        container.innerHTML = '<p class="text-surface-500 text-sm">Chưa có dữ liệu thành viên</p>';
+        return;
+      }
+
+      const html = memberRanked.map((m, idx) => {
+        const initial = m.name.charAt(0).toUpperCase();
+        const bgColors = ['bg-blue-100', 'bg-green-100', 'bg-yellow-100', 'bg-purple-100', 'bg-pink-100'];
+        const bgColor = bgColors[idx % bgColors.length];
+        const textColors = ['text-blue-600', 'text-green-600', 'text-yellow-600', 'text-purple-600', 'text-pink-600'];
+        const textColor = textColors[idx % textColors.length];
+        const consistencyLabel = m.consistencyScore < 0.2 ? 'Đều' : 'Biến động';
+        const consistencyColor = m.consistencyScore < 0.2 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700';
+
+        // Sparkline SVG
+        const sparklineHtml = renderSparkline(m.sparkline);
+
+        return `
+        <div class="flex items-center gap-4 p-3 rounded-xl hover:bg-surface-50 cursor-pointer transition-colors"
+             onclick="showMemberDetail('${m.id}')">
+          <div class="w-10 h-10 rounded-full ${bgColor} flex items-center justify-center ${textColor} font-bold text-sm">
+            ${initial}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-surface-900 truncate">${m.name}</span>
+              <span class="text-xs px-2 py-0.5 rounded-full ${consistencyColor}">${consistencyLabel}</span>
+            </div>
+            <div class="text-sm text-surface-500">${formatCurrency(m.totalSpend)}</div>
+          </div>
+          <div class="flex-shrink-0 w-16 h-6">
+            ${sparklineHtml}
+          </div>
+        </div>`;
+      }).join('');
+
+      container.innerHTML = html;
+    }
+
+    function renderSparkline(data) {
+      if (!data || data.length === 0) return '';
+
+      const max = Math.max(...data) || 1;
+      const min = Math.min(...data) || 0;
+      const range = max - min || 1;
+      const width = 64;
+      const height = 24;
+      const padding = 2;
+
+      const points = data.map((v, i) => {
+        const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
+        const y = height - padding - ((v - min) / range) * (height - 2 * padding);
+        return `${x},${y}`;
+      }).join(' ');
+
+      return `<svg width="${width}" height="${height}" class="overflow-visible">
+        <polyline points="${points}" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>`;
+    }
+
+    window.showMemberDetail = (memberId) => {
+      // TODO: drilldown - show member spending detail
+      console.log('Show member detail:', memberId);
+    };
+
     // --- UTILS ---
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
     const formatDate = (isoStr) => {
