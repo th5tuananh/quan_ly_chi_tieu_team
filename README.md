@@ -48,6 +48,7 @@
 | **F5a** | Audit log thanh toán | Sheet `LichSuThanhToan` ghi lại ai trả, lúc nào |
 | **F5b** | Xuất CSV | Export lịch sử ra file CSV (UTF-8 BOM) |
 | **F6** | Batch Settlement | Chọn nhiều dòng nợ, duyệt trả hàng loạt |
+| **F7** | Debt Search & Filter | Filter nợ theo người nợ/chủ nợ/khoảng tiền, Layout B 2-row fixed |
 
 ### 🇬🇧 Features
 
@@ -59,6 +60,7 @@
 | **F5a** | Payment Audit Log | `LichSuThanhToan` sheet records who paid and when |
 | **F5b** | CSV Export | Export transaction history to CSV (UTF-8 BOM) |
 | **F6** | Batch Settlement | Select multiple debt rows, batch mark as paid |
+| **F7** | Debt Search & Filter | Filter debts by debtor/creditor/amount range, Layout B 2-row fixed |
 
 ---
 
@@ -187,7 +189,13 @@
 ├── docs/superpowers/
 │   ├── ideas/           # Backlog các ý tưởng tính năng
 │   ├── plans/           # Chi tiết implementation plans
-│   └── specs/           # Design specifications
+│   │   ├── 2026-04-18-5-features-implementation.md
+│   │   ├── 2026-04-22-debt-settlement-design.md
+│   │   ├── 2026-04-23-batch-settlement.md
+│   │   └── 2026-04-24-filter-bar-redesign.md
+│   └── specs/
+│       ├── 2026-04-23-debt-search-filter-design.md
+│       └── 2026-04-24-filter-bar-redesign.md
 └── README.md           # This file
 ```
 

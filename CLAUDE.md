@@ -79,8 +79,11 @@ Xác nhận "đã trả hết"
     ├── plans/
     │   ├── 2026-04-18-5-features-implementation.md
     │   ├── 2026-04-22-debt-settlement-design.md
-    │   └── 2026-04-23-batch-settlement.md
+    │   ├── 2026-04-23-batch-settlement.md
+    │   └── 2026-04-24-filter-bar-redesign.md
     └── specs/
+        ├── 2026-04-23-debt-search-filter-design.md
+        └── 2026-04-24-filter-bar-redesign.md
 ```
 
 ### Database Schema (Google Sheets)
@@ -149,6 +152,15 @@ Xác nhận "đã trả hết"
 - Backend: `markBatchPaid(chiTietIds[])` — nhận array, atomic mark `daThanhToan=true` + audit log cho từng dòng
 - Frontend: `batchSelectedIds` Set + `handleBatchToggle()`, `handleBatchHeaderToggle()`, `updateBatchFooter()`, `submitBatchSettlement()`
 - `refreshUI()` clear selection và ẩn footer sau khi submit thành công
+
+### F7 — Debt Search & Filter (Tìm kiếm/Lọc nợ trong Tổng Quan)
+- Filter bar với 2 dropdowns (Người nợ, Chủ nợ) + 2 number inputs (Từ/Đến VND) + nút Tìm/Reset
+- Client-side filter trên `summaryData` đã load sẵn, không cần backend changes
+- Empty state message khi không có kết quả
+- Stats cards ẩn khi filter active
+- Layout B: 2-row fixed với spacer `flex-1` đẩy buttons sang phải
+- Hàm: `populateFilterDropdowns(members)`, `applyFilter(summaryData)`, `renderDebtSummary(displayData, isOptimized)`
+- `window._summaryData` lưu raw summary để filter apply lên data gốc
 
 ## 🔧 Testing
 ```bash

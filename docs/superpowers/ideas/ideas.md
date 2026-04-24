@@ -5,7 +5,7 @@
 ---
 
 ## 1. 🎯 Batch Settlement (Duyệt trả nợ hàng loạt)
-**Status:** 🔴 Chưa thực hiện → 🟡 **Đang thực hiện**
+**Status:** 🟢 **Đã thực hiện**
 
 **Problem:** Mỗi lần xác nhận trả nợ chỉ mark được 1 ChiTiet. Với team 5-10 người, cuối tháng việc mark từng dòng nợ rất tốn thời gian.
 
@@ -21,14 +21,24 @@
 ---
 
 ## 2. 🔍 Debt Search & Filter trong Tổng Quan
-**Status:** 🟡 Chưa thực hiện
+**Status:** 🟢 **Đã thực hiện**
 
 **Problem:** Tab Tổng Quan hiện show tất cả nợ. Khi có 50+ giao dịch, không thể tìm nhanh ai đang nợ ai.
 
 **Giải pháp:**
-- Thêm search bar + filter dropdown trong Tổng Quan
-- Filter theo: người nợ, người được đòi, khoảng ngày, số tiền
-- Kết hợp với toggle "Tối ưu hóa" hiện tại
+- Thêm filter bar với 2 dropdowns (Người nợ, Chủ nợ) + 2 number inputs (Từ/Đến VND)
+- Filter theo: người nợ, người được đòi, khoảng tiền
+- Client-side filter trên `summaryData` đã load sẵn, không cần backend changes
+
+**Layout:** Layout B (2-row fixed) — Row 1: member dropdowns, Row 2: amount inputs + spacer + buttons
+
+**Files changed:**
+- `tab-tong-quan.html` — filter bar HTML restructure
+- `utils.html` — `populateFilterDropdowns()`, `applyFilter()`, `renderDebtSummary()`
+- `index.html` — `max-w-5xl` (content width tăng từ 896px → 1024px)
+
+**Spec:** `docs/superpowers/specs/2026-04-24-filter-bar-redesign.md`
+**Plan:** `docs/superpowers/plans/2026-04-24-filter-bar-redesign.md`
 
 ---
 
