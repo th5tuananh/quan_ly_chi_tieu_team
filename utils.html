@@ -503,6 +503,70 @@
       });
     };
 
+    function renderSourceArea(sourceBreakdown) {
+      const ctx = document.getElementById('chart-source-area');
+      if (!ctx) return;
+
+      if (window.sourceAreaChart) window.sourceAreaChart.destroy();
+
+      const labels = sourceBreakdown.map(d => {
+        const [y, mo] = d.month.split('-');
+        return `Thg ${parseInt(mo)}`;
+      });
+
+      window.sourceAreaChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Grab',
+              data: sourceBreakdown.map(d => d.grab),
+              borderColor: '#3B82F6',
+              backgroundColor: 'rgba(59, 130, 246, 0.3)',
+              fill: true,
+              tension: 0.4
+            },
+            {
+              label: 'ShopeeFood',
+              data: sourceBreakdown.map(d => d.shopee),
+              borderColor: '#22C55E',
+              backgroundColor: 'rgba(34, 197, 94, 0.3)',
+              fill: true,
+              tension: 0.4
+            },
+            {
+              label: 'Bên ngoài',
+              data: sourceBreakdown.map(d => d.outside),
+              borderColor: '#6B7280',
+              backgroundColor: 'rgba(107, 114, 128, 0.3)',
+              fill: true,
+              tension: 0.4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${ctx.raw}%`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: { callback: v => v + '%' }
+            }
+          }
+        }
+      });
+    }
+
     // --- UTILS ---
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
     const formatDate = (isoStr) => {
